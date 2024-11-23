@@ -8,31 +8,6 @@ class URLExtractor:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_sm")
     
-    def _get_meaningful_url_name(self, url: str) -> str:
-        """Extract meaningful name from URL"""
-        try:
-            # Parse URL
-            parsed = urlparse(url)
-            # Get path without leading/trailing slashes
-            path = parsed.path.strip('/')
-            
-            if not path:
-                # If no path, use domain without TLD
-                return parsed.netloc.split('.')[0]
-            
-            # Split path and take meaningful segments
-            segments = path.split('/')
-            # Filter out common words and join with hyphens
-            meaningful_segments = [
-                seg for seg in segments 
-                if seg and not seg.isdigit() and seg not in {'index', 'html', 'php'}
-            ]
-            
-            return '-'.join(meaningful_segments) if meaningful_segments else parsed.netloc
-            
-        except Exception:
-            return "unknown-source"
-    
     def extract_text(self, url: str) -> List[Dict[str, str]]:
         """Extract text from URL with structure preservation"""
         try:
@@ -40,8 +15,8 @@ class URLExtractor:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Get meaningful source name
-            source_name = f"{self._get_meaningful_url_name(url)}"
+            # Use full URL as source
+            source_name = url
             
             extracted_data = []
             current_section = ""
@@ -55,8 +30,8 @@ class URLExtractor:
                         extracted_data.append({
                             'section': current_section,
                             'content': ' '.join(section_content),
-                            'source': f"{source_name}-web",
-                            'page': ''  # URLs don't have pages
+                            'source': source_name,  # Use full URL
+                            'page': ''
                         })
                         section_content = []
                     current_section = element.get_text().strip()
@@ -70,7 +45,7 @@ class URLExtractor:
                 extracted_data.append({
                     'section': current_section,
                     'content': ' '.join(section_content),
-                    'source': f"{source_name}-web",
+                    'source': source_name,  # Use full URL
                     'page': ''
                 })
             

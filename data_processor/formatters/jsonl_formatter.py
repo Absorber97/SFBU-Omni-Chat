@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 from config import OPENAI_MODELS, MODEL_PARAMS
 from itertools import islice
+from urllib.parse import urlparse
 
 class JSONLFormatter:
     def __init__(self, output_dir: str = "training_data", api_key: str = None, batch_size: int = 5):
@@ -15,7 +16,6 @@ class JSONLFormatter:
         self.current_output_dir = None
         self.client = OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
         self.batch_size = batch_size
-        # Load existing hashes from all training data
         self.processed_hashes = self._load_existing_hashes()
     
     def _load_existing_hashes(self) -> set:
@@ -42,101 +42,123 @@ class JSONLFormatter:
         for i in range(0, len(items), batch_size):
             yield items[i:i + batch_size]
 
-    def format_data(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Format extracted data into JSONL format with preview updates"""
-        formatted_data = []
-        
-        # Process in batches using self.batch_size
-        for batch in self._batch_items(data, self.batch_size):
-            try:
-                qa_pairs = self._generate_qa_pairs_batch(batch)
-                
-                for item, pairs in zip(batch, qa_pairs):
-                    for prompt, completion in pairs:
-                        # Clean both prompt and completion
-                        clean_prompt = self._clean_qa_text(prompt)
-                        clean_completion = self._clean_qa_text(completion)
-                        
-                        content_hash = self._generate_hash(clean_prompt + clean_completion)
-                        
-                        if content_hash not in self.processed_hashes:
-                            entry = {
-                                'prompt': clean_prompt,
-                                'completion': clean_completion,
-                                'source': item['source'],
-                                'section': item['section'],
-                                'page': item.get('page', '')
-                            }
-                            formatted_data.append(entry)
-                            self.processed_hashes.add(content_hash)
-                            
-                            # Update preview immediately
-                            self._update_preview(entry)
-                            
-            except Exception as e:
-                self.logger.error(f"Error processing batch: {str(e)}")
-                continue
-                
-        return formatted_data
-
-    def _generate_qa_pairs_batch(self, items: List[Dict[str, str]]) -> List[List[Tuple[str, str]]]:
+    def _generate_qa_pairs_batch(self, batch: List[Dict[str, str]]) -> List[List[Tuple[str, str]]]:
         """Generate Q&A pairs for a batch of items"""
         try:
             # Prepare batch messages
-            messages = []
-            for item in items:
-                messages.append([
-                    {"role": "system", "content": """
-                    Generate 2-3 contextually relevant question-answer pairs from the given text.
-                    Requirements:
-                    - Focus on important information useful for students or staff
-                    - Questions should be clear and direct (no "Q:" prefix)
-                    - Answers should be complete sentences (no "A:" prefix)
-                    - Avoid redundant or trivial questions
-                    - Make questions natural and conversational
-                    
-                    Format: Return only the Q&A pairs, one per line, separated by ||| between question and answer.
-                    Example:
-                    What are the housing options available at SFBU? ||| SFBU offers non-traditional campus housing for both undergraduate and graduate students.
-                    How do I contact the Residential Life staff? ||| You can reach the Residential Life staff through email at residentiallife@sfbu.edu.
-                    """},
-                    {"role": "user", "content": f"Section: {item['section']}\n\nContent: {item['content']}"}
-                ])
-
-            # Create batch completion request
-            responses = []
-            for msg in messages:
+            qa_pairs_list = []
+            for item in batch:
                 response = self.client.chat.completions.create(
                     model=OPENAI_MODELS['formatter'],
-                    messages=msg,
+                    messages=[
+                        {"role": "system", "content": """
+                        Generate 2-3 contextually relevant question-answer pairs from the given text.
+                        Requirements:
+                        - Focus on important information useful for students or staff
+                        - Questions should be clear and direct (no "Q:" prefix)
+                        - Answers should be complete sentences (no "A:" prefix)
+                        - Avoid redundant or trivial questions
+                        - Make questions natural and conversational
+                        
+                        Format: Return only the Q&A pairs, one per line, separated by ||| between question and answer.
+                        Example:
+                        What are the housing options available at SFBU? ||| SFBU offers non-traditional campus housing for both undergraduate and graduate students.
+                        How do I contact the Residential Life staff? ||| You can reach the Residential Life staff through email at residentiallife@sfbu.edu.
+                        """},
+                        {"role": "user", "content": f"Section: {item['section']}\n\nContent: {item['content']}"}
+                    ],
                     **MODEL_PARAMS['formatter']
                 )
-                responses.append(response)
-
-            # Process all responses
-            all_qa_pairs = []
-            for response in responses:
+                
                 qa_text = response.choices[0].message.content
                 qa_pairs = []
                 
                 for line in qa_text.strip().split('\n'):
                     if '|||' in line:
                         q, a = line.split('|||')
-                        # Clean up any remaining Q: or A: prefixes
-                        q = q.strip().replace('Q:', '').replace('A:', '').strip()
-                        a = a.strip().replace('Q:', '').replace('A:', '').strip()
-                        qa_pairs.append((q, a))
+                        qa_pairs.append((
+                            self._clean_qa_text(q.strip()),
+                            self._clean_qa_text(a.strip())
+                        ))
                 
-                all_qa_pairs.append(qa_pairs)
+                qa_pairs_list.append(qa_pairs)
             
-            return all_qa_pairs
+            return qa_pairs_list
             
         except Exception as e:
             self.logger.error(f"OpenAI API batch error: {str(e)}")
-            return [[] for _ in items]  # Return empty lists for failed batch
+            return [[] for _ in batch]  # Return empty lists for failed batch
 
-    def save_jsonl(self, formatted_data: List[Dict[str, str]], dataset_name: str) -> Dict[str, str]:
-        """Save formatted data to JSONL files with train/val split"""
+    def format_data(self, data: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], Dict[str, str]]:
+        """Format extracted data into JSONL format"""
+        formatted_data = []
+        source_metadata = {}  # Track sources with both versions
+        
+        for batch in self._batch_items(data, self.batch_size):
+            try:
+                qa_pairs = self._generate_qa_pairs_batch(batch)
+                
+                for item, pairs in zip(batch, qa_pairs):
+                    # Track source information for metadata
+                    original_source = item['source']
+                    friendly_source = self._get_friendly_source_name(original_source)
+                    source_metadata[original_source] = friendly_source
+                    
+                    for prompt, completion in pairs:
+                        content_hash = self._generate_hash(prompt + completion)
+                        
+                        if content_hash not in self.processed_hashes:
+                            # Only include prompt and completion in training data
+                            entry = {
+                                'prompt': prompt,
+                                'completion': completion
+                            }
+                            formatted_data.append(entry)
+                            self.processed_hashes.add(content_hash)
+                            
+            except Exception as e:
+                self.logger.error(f"Error processing batch: {str(e)}")
+                continue
+                
+        return formatted_data, source_metadata
+
+    def _get_friendly_source_name(self, source_path: str) -> str:
+        """Convert source path to user-friendly name"""
+        try:
+            # Check if it's a URL
+            if source_path.startswith(('http://', 'https://')):
+                parsed = urlparse(source_path)
+                path = parsed.path.strip('/')
+                if not path:
+                    return parsed.netloc.split('.')[0].capitalize()
+                
+                # Split path and take meaningful segments
+                segments = path.split('/')
+                meaningful_segments = [
+                    seg for seg in segments 
+                    if seg and not seg.isdigit() and seg not in {'index', 'html', 'php'}
+                ]
+                
+                # Convert to title case and join with spaces
+                friendly_name = ' '.join(
+                    word.capitalize() 
+                    for segment in meaningful_segments 
+                    for word in segment.split('-')
+                )
+                return friendly_name
+                
+            # Handle file paths (existing logic)
+            filename = os.path.splitext(os.path.basename(source_path))[0]
+            if filename.endswith('-web'):
+                filename = filename[:-4]
+            friendly_name = filename.replace('-', ' ').replace('_', ' ')
+            return ' '.join(word.capitalize() for word in friendly_name.split())
+                
+        except Exception:
+            return source_path
+
+    def save_jsonl(self, formatted_data: List[Dict[str, str]], dataset_name: str, source_metadata: Dict[str, str]) -> Dict[str, str]:
+        """Save formatted data to JSONL files with enhanced metadata"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         output_dir = os.path.join(self.output_dir, timestamp)
         os.makedirs(output_dir, exist_ok=True)
@@ -147,28 +169,25 @@ class JSONLFormatter:
         val_file = os.path.join(output_dir, f"{dataset_name}_val.jsonl")
         metadata_file = os.path.join(output_dir, f"{dataset_name}_metadata.json")
         
-        # Split data into train/val (90/10 split)
+        # Split data (90/10)
         split_idx = int(len(formatted_data) * 0.9)
         train_data = formatted_data[:split_idx]
         val_data = formatted_data[split_idx:]
-        
-        # Clean up source paths before saving (keep extension)
-        for data in [train_data, val_data]:
-            for item in data:
-                if 'source' in item:
-                    item['source'] = os.path.basename(item['source'])  # Keep the extension
         
         # Save files
         self._save_jsonl_file(train_data, train_file)
         self._save_jsonl_file(val_data, val_file)
         
-        # Save metadata
+        # Enhanced metadata
         metadata = {
             'timestamp': timestamp,
             'total_examples': len(formatted_data),
             'train_examples': len(train_data),
             'val_examples': len(val_data),
-            'sources': list(set(os.path.basename(item['source']) for item in formatted_data))
+            'sources': {
+                'original': list(source_metadata.keys()),
+                'friendly': list(source_metadata.values())
+            }
         }
         
         with open(metadata_file, 'w') as f:
@@ -177,7 +196,8 @@ class JSONLFormatter:
         return {
             'train_file': train_file,
             'val_file': val_file,
-            'metadata_file': metadata_file
+            'metadata_file': metadata_file,
+            'output_dir': output_dir
         }
 
     def _save_jsonl_file(self, data: List[Dict], file_path: str):

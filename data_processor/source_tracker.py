@@ -58,7 +58,7 @@ class SourceTracker:
                 return source_path  # Last resort: return original
     
     def get_processed_sources(self) -> List[Dict[str, str]]:
-        """Get list of processed sources from training data"""
+        """Get list of processed sources with friendly names only"""
         processed_sources = []
         try:
             if os.path.exists("training_data"):
@@ -69,15 +69,13 @@ class SourceTracker:
                         for metadata_file in metadata_files:
                             with open(os.path.join(dir_path, metadata_file), 'r') as f:
                                 metadata = json.load(f)
-                                # Sources in metadata are already cleaned up
-                                processed_sources.extend([
-                                    {
-                                        'source': source,  # Already formatted in metadata
+                                # Only use friendly names for display
+                                for friendly in metadata['sources'].get('friendly', []):
+                                    processed_sources.append({
+                                        'source': friendly,  # Only show friendly name
                                         'timestamp': metadata['timestamp'],
                                         'dataset_name': metadata_file.replace('_metadata.json', '')
-                                    }
-                                    for source in metadata['sources']
-                                ])
+                                    })
             return processed_sources
         except Exception as e:
             raise Exception(f"Error reading processed sources: {str(e)}") 

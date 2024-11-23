@@ -40,11 +40,11 @@ class SFBUApp:
             extracted_data = self.pdf_extractor.extract_text(pdf_path)
             self.logger.info(f"Extracted {len(extracted_data)} chunks from PDF")
             
-            formatted_data = self.jsonl_formatter.format_data(extracted_data)
+            formatted_data, source_metadata = self.jsonl_formatter.format_data(extracted_data)
             dataset_name = f"pdf_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
             # Save with train/val split
-            files = self.jsonl_formatter.save_jsonl(formatted_data, dataset_name)
+            files = self.jsonl_formatter.save_jsonl(formatted_data, dataset_name, source_metadata)
             if not files:  # Handle case when no data is saved
                 return (
                     {"status": "error", "message": "No data to process"},
@@ -64,8 +64,8 @@ class SFBUApp:
                     'val_file': files['val_file'],
                     'metadata_file': files['metadata_file']
                 },
-                preview_data['train_preview'],  # Already in list format for Dataframe
-                preview_data['val_preview']     # Already in list format for Dataframe
+                preview_data['train_preview'],
+                preview_data['val_preview']
             )
         except Exception as e:
             self.logger.error(f"Error processing PDF: {str(e)}")
@@ -108,14 +108,27 @@ class SFBUApp:
             extracted_data = self.url_extractor.extract_text(url)
             self.logger.info(f"Extracted {len(extracted_data)} sections from URL")
             
-            formatted_data = self.jsonl_formatter.format_data(extracted_data)
+            formatted_data, source_metadata = self.jsonl_formatter.format_data(extracted_data)
             dataset_name = f"url_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            self.jsonl_formatter.save_jsonl(formatted_data, dataset_name)
+            
+            # Save with train/val split
+            files = self.jsonl_formatter.save_jsonl(formatted_data, dataset_name, source_metadata)
+            if not files:
+                return {
+                    "status": "error", 
+                    "message": "No data to process"
+                }
+            
+            # Load preview data
+            preview_data = self._load_preview_data(files['train_file'], files['val_file'])
             
             return {
                 'status': 'success',
                 'message': f"Processed {len(formatted_data)} entries",
-                'output_dir': self.jsonl_formatter.current_output_dir
+                'output_dir': self.jsonl_formatter.current_output_dir,
+                'train_file': files['train_file'],
+                'val_file': files['val_file'],
+                'metadata_file': files['metadata_file']
             }
         except Exception as e:
             self.logger.error(f"Error processing URL: {str(e)}")
@@ -229,8 +242,19 @@ def create_interface():
         """Get information about processed and fine-tuned sources"""
         try:
             tracker = SourceTracker()
+            sources = tracker.get_processed_sources()
+            
+            # Format sources for display
+            formatted_sources = []
+            for source in sources:
+                formatted_sources.append({
+                    'Source': source['source'],
+                    'Processed': source['timestamp'],
+                    'Dataset': source['dataset_name']
+                })
+            
             return {
-                'processed_sources': tracker.get_processed_sources(),
+                'processed_sources': formatted_sources,
                 'fine_tuned_sources': tracker.get_fine_tuned_sources()
             }
         except Exception as e:
