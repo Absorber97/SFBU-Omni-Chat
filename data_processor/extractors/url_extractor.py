@@ -1,60 +1,80 @@
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Dict, Optional
-import logging
-from urllib.parse import urljoin
+from typing import List, Dict
+import spacy
+from urllib.parse import urlparse
 
 class URLExtractor:
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        
-    def extract_text(self, url: str, allowed_domains: Optional[List[str]] = None) -> List[Dict[str, str]]:
-        """Extract text content from URLs"""
+        self.nlp = spacy.load("en_core_web_sm")
+    
+    def _get_meaningful_url_name(self, url: str) -> str:
+        """Extract meaningful name from URL"""
         try:
-            self.logger.info(f"Starting extraction from URL: {url}")
-            extracted_data = []
+            # Parse URL
+            parsed = urlparse(url)
+            # Get path without leading/trailing slashes
+            path = parsed.path.strip('/')
             
-            # Use empty list if allowed_domains is None
-            allowed_domains = allowed_domains or []
+            if not path:
+                # If no path, use domain without TLD
+                return parsed.netloc.split('.')[0]
             
-            # Fetch and parse the webpage
-            response = requests.get(url, headers={'User-Agent': 'SFBU-Bot'})
+            # Split path and take meaningful segments
+            segments = path.split('/')
+            # Filter out common words and join with hyphens
+            meaningful_segments = [
+                seg for seg in segments 
+                if seg and not seg.isdigit() and seg not in {'index', 'html', 'php'}
+            ]
+            
+            return '-'.join(meaningful_segments) if meaningful_segments else parsed.netloc
+            
+        except Exception:
+            return "unknown-source"
+    
+    def extract_text(self, url: str) -> List[Dict[str, str]]:
+        """Extract text from URL with structure preservation"""
+        try:
+            response = requests.get(url)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Extract main content (customize selectors based on SFBU website structure)
-            main_content = soup.find_all(['p', 'h1', 'h2', 'h3', 'li'])
+            # Get meaningful source name
+            source_name = f"{self._get_meaningful_url_name(url)}"
             
+            extracted_data = []
             current_section = ""
-            current_text = []
+            section_content = []
             
-            for element in main_content:
-                if element.name.startswith('h'):
+            # Process main content areas
+            for element in soup.find_all(['h1', 'h2', 'h3', 'p']):
+                if element.name in ['h1', 'h2', 'h3']:
                     # Save previous section if exists
-                    if current_text:
+                    if section_content:
                         extracted_data.append({
-                            'content': ' '.join(current_text),
                             'section': current_section,
-                            'source': url
+                            'content': ' '.join(section_content),
+                            'source': f"{source_name}-web",
+                            'page': ''  # URLs don't have pages
                         })
+                        section_content = []
                     current_section = element.get_text().strip()
-                    current_text = []
-                else:
+                elif element.name == 'p':
                     text = element.get_text().strip()
-                    if text:
-                        current_text.append(text)
+                    if text:  # Only add non-empty paragraphs
+                        section_content.append(text)
             
-            # Add the last section
-            if current_text:
+            # Add final section
+            if section_content:
                 extracted_data.append({
-                    'content': ' '.join(current_text),
                     'section': current_section,
-                    'source': url
+                    'content': ' '.join(section_content),
+                    'source': f"{source_name}-web",
+                    'page': ''
                 })
             
-            self.logger.info(f"Successfully extracted {len(extracted_data)} sections from {url}")
             return extracted_data
             
         except Exception as e:
-            self.logger.error(f"Error extracting from URL {url}: {str(e)}")
-            raise 
+            raise Exception(f"Error extracting text from URL: {str(e)}")

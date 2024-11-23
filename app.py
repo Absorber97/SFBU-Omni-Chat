@@ -221,6 +221,46 @@ class SFBUApp:
 def create_interface():
     app = SFBUApp()
     
+    def update_logs():
+        """Get real-time logs"""
+        return app.logger.get_logs()
+    
+    def get_source_info():
+        """Get information about processed and fine-tuned sources"""
+        try:
+            tracker = SourceTracker()
+            return {
+                'processed_sources': tracker.get_processed_sources(),
+                'fine_tuned_sources': tracker.get_fine_tuned_sources()
+            }
+        except Exception as e:
+            return {'error': str(e)}
+    
+    def update_preview(output_dir: str):
+        """Update preview with processed data"""
+        if not output_dir or not os.path.exists(output_dir):
+            return [], []
+            
+        train_file = [f for f in os.listdir(output_dir) if f.endswith('_train.jsonl')]
+        val_file = [f for f in os.listdir(output_dir) if f.endswith('_val.jsonl')]
+        
+        train_data = []
+        val_data = []
+        
+        if train_file:
+            with open(os.path.join(output_dir, train_file[0]), 'r') as f:
+                for line in f:
+                    item = json.loads(line)
+                    train_data.append([item['prompt'], item['completion']])
+                    
+        if val_file:
+            with open(os.path.join(output_dir, val_file[0]), 'r') as f:
+                for line in f:
+                    item = json.loads(line)
+                    val_data.append([item['prompt'], item['completion']])
+                    
+        return train_data[:5], val_data[:5]  # Show first 5 entries
+    
     # Get absolute paths to images
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sfbu_logo_path = os.path.join(current_dir, "assets", "images", "SFBU.jpeg")
@@ -240,42 +280,9 @@ def create_interface():
             return f"data:image/jpeg;base64,{encoded_string}"
 
     sfbu_logo_data_url = get_image_data_url(sfbu_logo_path)
-
-    def update_logs():
-        """Get real-time logs"""
-        return app.logger.get_logs()
-
-    def get_source_info():
-        """Get information about processed and fine-tuned sources"""
-        try:
-            sources_info = {
-                'processed_sources': [],
-                'fine_tuned_sources': []
-            }
-            
-            # Get processed sources from training_data directory
-            if os.path.exists("training_data"):
-                for timestamp_dir in os.listdir("training_data"):
-                    dir_path = os.path.join("training_data", timestamp_dir)
-                    if os.path.isdir(dir_path):
-                        for file in os.listdir(dir_path):
-                            if file.endswith('_metadata.json'):
-                                with open(os.path.join(dir_path, file), 'r') as f:
-                                    metadata = json.load(f)
-                                    sources_info['processed_sources'].extend(metadata['sources'])
-            
-            # Get fine-tuned sources from a separate tracking file
-            tracking_file = "fine_tuned_sources.json"
-            if os.path.exists(tracking_file):
-                with open(tracking_file, 'r') as f:
-                    sources_info['fine_tuned_sources'] = json.load(f)
-            
-            return sources_info
-        except Exception as e:
-            return {'error': str(e)}
-
+    
     with gr.Blocks(title="SFBU Omni Chat") as interface:
-        # Header with logo and title in same row using pure HTML with data URL
+        # Header with logo and title using data URL
         gr.Markdown(f"""
             <div class="header-row">
                 <div class="sfbu-logo-container">
@@ -288,26 +295,25 @@ def create_interface():
                 display: flex;
                 align-items: center;
                 gap: 20px;
-                padding: 10px 20px;                
+                padding: 10px 20px;
                 border-bottom: 2px solid #003366;
             }}
-            .sfbu-logo-container {{
-                width: 64px;
-                height: 64px;
-                flex-shrink: 0;
-            }}
             .sfbu-logo {{
-                width: 64px;
-                height: 64px;
-                object-fit: cover;
-                display: block;
+                flex: 0 0 64px;  /* Fixed size, won't grow or shrink */
+                width: 64px !important;
+                height: 64px !important;
+                object-fit: contain !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }}
             .header-title {{
                 flex: 1;
-                margin: 0;
-                padding: 0;
-                font-size: 24px;
-                line-height: 64px;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+            .header-title h1 {{
+                margin: 0 !important;
+                line-height: 64px !important;
             }}
             </style>
         """)
@@ -317,7 +323,6 @@ def create_interface():
                 with gr.Column():
                     pdf_input = gr.File(label="📄 Upload PDF")
                     process_pdf_btn = gr.Button("📥 Process PDF")
-                with gr.Column():
                     url_input = gr.Textbox(label="🔗 Enter URL")
                     process_url_btn = gr.Button("🌐 Process URL")
             
@@ -436,7 +441,7 @@ def create_interface():
         Powered by San Francisco Bay University . Guided By Prof. Henry Chang
         """)
 
-        # Update event handlers
+        # Event handlers
         refresh_sources.click(
             fn=get_source_info,
             outputs=[sources_display]
@@ -458,6 +463,10 @@ def create_interface():
             fn=app.process_url,
             inputs=[url_input],
             outputs=[process_output]
+        ).then(
+            fn=lambda x: update_preview(x.get('output_dir')) if isinstance(x, dict) else ([], []),
+            inputs=[process_output],
+            outputs=[train_preview, val_preview]
         ).then(
             fn=update_logs,
             outputs=[log_output]

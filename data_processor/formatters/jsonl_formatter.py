@@ -10,43 +10,68 @@ from itertools import islice
 
 class JSONLFormatter:
     def __init__(self, output_dir: str = "training_data", api_key: str = None, batch_size: int = 5):
-        self.processed_hashes = set()
         self.output_dir = output_dir
         self.logger = logging.getLogger(__name__)
         self.current_output_dir = None
         self.client = OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
         self.batch_size = batch_size
-        
-    def _batch_items(self, items: List[Dict[str, str]]) -> Iterator[List[Dict[str, str]]]:
-        """Yield batches of items"""
-        it = iter(items)
-        while batch := list(islice(it, self.batch_size)):
-            yield batch
+        # Load existing hashes from all training data
+        self.processed_hashes = self._load_existing_hashes()
+    
+    def _load_existing_hashes(self) -> set:
+        """Load hashes from all existing training data"""
+        hashes = set()
+        if os.path.exists(self.output_dir):
+            for timestamp_dir in os.listdir(self.output_dir):
+                dir_path = os.path.join(self.output_dir, timestamp_dir)
+                if os.path.isdir(dir_path):
+                    for file in os.listdir(dir_path):
+                        if file.endswith('.jsonl'):
+                            file_path = os.path.join(dir_path, file)
+                            with open(file_path, 'r') as f:
+                                for line in f:
+                                    data = json.loads(line)
+                                    content_hash = self._generate_hash(
+                                        data['prompt'] + data['completion']
+                                    )
+                                    hashes.add(content_hash)
+        return hashes
 
-    def format_data(self, extracted_data: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Format extracted data into contextually relevant Q&A pairs using OpenAI in batches"""
-        self.logger.info("Starting batch data formatting with OpenAI")
+    def _batch_items(self, items: List[Dict[str, str]], batch_size: int) -> List[List[Dict[str, str]]]:
+        """Split items into batches"""
+        for i in range(0, len(items), batch_size):
+            yield items[i:i + batch_size]
+
+    def format_data(self, data: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Format extracted data into JSONL format with preview updates"""
         formatted_data = []
         
-        # Process data in batches
-        for batch in self._batch_items(extracted_data):
+        # Process in batches using self.batch_size
+        for batch in self._batch_items(data, self.batch_size):
             try:
                 qa_pairs = self._generate_qa_pairs_batch(batch)
                 
                 for item, pairs in zip(batch, qa_pairs):
                     for prompt, completion in pairs:
-                        content_hash = self._generate_hash(prompt + completion)
+                        # Clean both prompt and completion
+                        clean_prompt = self._clean_qa_text(prompt)
+                        clean_completion = self._clean_qa_text(completion)
+                        
+                        content_hash = self._generate_hash(clean_prompt + clean_completion)
                         
                         if content_hash not in self.processed_hashes:
                             entry = {
-                                'prompt': prompt,
-                                'completion': completion,
+                                'prompt': clean_prompt,
+                                'completion': clean_completion,
                                 'source': item['source'],
                                 'section': item['section'],
                                 'page': item.get('page', '')
                             }
                             formatted_data.append(entry)
                             self.processed_hashes.add(content_hash)
+                            
+                            # Update preview immediately
+                            self._update_preview(entry)
                             
             except Exception as e:
                 self.logger.error(f"Error processing batch: {str(e)}")
@@ -166,8 +191,33 @@ class JSONLFormatter:
         return hashlib.md5(content.encode()).hexdigest() 
 
     def _clean_qa_text(self, text: str) -> str:
-        """Clean up Q&A text by removing prefixes and extra whitespace"""
-        text = text.strip()
-        text = text.replace('Q:', '').replace('A:', '')
-        text = ' '.join(text.split())  # Normalize whitespace
-        return text 
+        """Clean up text and handle special characters"""
+        # Replace problematic characters with safe alternatives
+        replacements = {
+            '"': '"',  # Smart quotes
+            '"': '"',
+            ''': "'",
+            ''': "'",
+            '…': '...',
+            '–': '-',
+            '—': '-',
+            '\u2028': ' ',  # Line separator
+            '\u2029': ' ',  # Paragraph separator
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+            
+        # Remove any other control characters
+        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
+        
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        
+        return text.strip()
+    
+    def _update_preview(self, entry: Dict[str, str]):
+        """Update preview data"""
+        # Implement preview update mechanism
+        # This will be called by the Gradio interface
+        pass
