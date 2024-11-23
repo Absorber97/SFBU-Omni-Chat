@@ -6,41 +6,37 @@ from datetime import datetime
 class SourceTracker:
     def __init__(self, tracking_file: str = "fine_tuned_sources.json"):
         self.tracking_file = tracking_file
-        self._ensure_tracking_file()
     
-    def _ensure_tracking_file(self):
-        """Ensure tracking file exists"""
-        if not os.path.exists(self.tracking_file):
-            with open(self.tracking_file, 'w') as f:
-                json.dump([], f)
+    def get_fine_tuned_sources(self) -> List[Dict[str, str]]:
+        """Get list of fine-tuned sources"""
+        try:
+            if os.path.exists(self.tracking_file):
+                with open(self.tracking_file, 'r') as f:
+                    sources = json.load(f)
+                    # Format display names for all sources
+                    for source in sources:
+                        if 'file_path' in source and 'display_name' not in source:
+                            source['display_name'] = self.format_source_path(source['file_path'])
+                    return sources
+            return []  # Return empty list if file doesn't exist
+        except Exception as e:
+            return []  # Return empty list on error
     
     def add_fine_tuned_source(self, source_info: Dict[str, str]):
         """Add a new fine-tuned source"""
         try:
-            sources = self.get_fine_tuned_sources()
+            sources = self.get_fine_tuned_sources()  # Get existing or empty list
             source_info['timestamp'] = datetime.now().isoformat()
             # Format the file path if it exists
             if 'file_path' in source_info:
                 source_info['display_name'] = self.format_source_path(source_info['file_path'])
             sources.append(source_info)
             
+            # Only create/write file when actually adding a source
             with open(self.tracking_file, 'w') as f:
                 json.dump(sources, f, indent=2)
         except Exception as e:
             raise Exception(f"Error adding fine-tuned source: {str(e)}")
-    
-    def get_fine_tuned_sources(self) -> List[Dict[str, str]]:
-        """Get list of fine-tuned sources"""
-        try:
-            with open(self.tracking_file, 'r') as f:
-                sources = json.load(f)
-                # Format display names for all sources
-                for source in sources:
-                    if 'file_path' in source and 'display_name' not in source:
-                        source['display_name'] = self.format_source_path(source['file_path'])
-                return sources
-        except Exception as e:
-            raise Exception(f"Error reading fine-tuned sources: {str(e)}")
     
     def format_source_path(self, source_path: str) -> str:
         """Format source path for display - extract only the filename with extension"""
