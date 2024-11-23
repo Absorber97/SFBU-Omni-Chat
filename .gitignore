@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+training_data/
+logs/
+.env
+formatted_data.jsonl
+*.jsonl
+!examples/*.jsonl  # Keep example JSONL files if needed
+
+# Keep assets
+!assets/
+!assets/images/
+!assets/images/*.jpeg
+!assets/images/*.jpg
+!assets/images/*.png
+
+# Model files
+*.pkl
+*.h5
+*.model
+*.bin
+
+# Logs
+*.log
+*.log.*
+log/
+
+# OS specific
+.DS_Store
+Thumbs.db 
