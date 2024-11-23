@@ -22,6 +22,12 @@ SFBU Omni Chat is an intelligent AI assistant specifically designed for San Fran
   - Multiple fine-tuned model support
   - Copy-paste functionality
 
+## Prerequisites
+
+- Python 3.8+
+- OpenAI API key
+- spaCy model: `en_core_web_sm`
+
 ## Installation
 
 1. Clone the repository:
@@ -44,6 +50,7 @@ source venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+python -m spacy download en_core_web_sm
 ```
 
 
@@ -92,19 +99,24 @@ sfbu-omni-chat/
 ├── app.py # Main application file
 ├── config.py # Configuration settings
 ├── requirements.txt # Project dependencies
+├── .env # Environment variables (create this)
+├── .gitignore # Git ignore rules
 ├── assets/
 │ └── images/ # Image assets
-├── chat_interface/
-│ └── chat_manager.py # Chat functionality
-├── data_processor/
+│ ├── SFBU.jpeg # SFBU logo
+│ └── Bayhawk.jpeg # Bayhawk mascot
+├── chat_interface/ # Chat functionality
+├── data_processor/ # Data processing modules
 │ ├── extractors/ # PDF and URL processors
 │ ├── formatters/ # Data formatting
 │ ├── fine_tuning/ # Model training
 │ └── source_tracker.py # Source management
 ├── logs/ # Application logs
-└── training_data/ # Processed training data
+├── training_data/ # Processed training data
+└── utils/ # Utility functions
 
 ```
+
 
 
 ## Development
@@ -113,6 +125,14 @@ sfbu-omni-chat/
 - Uses Gradio for the web interface
 - OpenAI API for AI model fine-tuning
 - Follows PEP 8 style guide
+
+### Key Dependencies
+
+- `openai`: OpenAI API client
+- `gradio`: Web interface framework
+- `PyPDF2`: PDF processing
+- `spacy`: Natural language processing
+- `python-dotenv`: Environment management
 
 ## Contributing
 
@@ -134,7 +154,7 @@ This project is proprietary and confidential. All rights reserved by San Francis
 
 ## Support
 
-For support, please contact [appropriate contact information].
+For support, please contact the SFBU IT department.
 
 ---
 Developed for San Francisco Bay University © 2024

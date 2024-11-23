@@ -32,31 +32,47 @@ ENV/
 *.swo
 
 # Project specific
-training_data/
-logs/
+training_data/*
+!training_data/.gitkeep
+logs/*
+!logs/.gitkeep
 .env
 formatted_data.jsonl
 *.jsonl
-!examples/*.jsonl  # Keep example JSONL files if needed
+!examples/*.jsonl  # Keep example JSONL files
 
-# Keep assets
+# Keep assets directory structure
 !assets/
 !assets/images/
 !assets/images/*.jpeg
 !assets/images/*.jpg
 !assets/images/*.png
+!assets/images/*.pdf  # Allow PDF files in assets
 
 # Model files
 *.pkl
 *.h5
 *.model
 *.bin
+fine_tuned_sources.json
 
 # Logs
 *.log
 *.log.*
 log/
 
+# Temporary files
+tmp/
+temp/
+.tmp/
+.temp/
+
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+.directory
+desktop.ini
+
+# Keep specific directories but ignore their contents
+!training_data/
+!logs/

@@ -2,6 +2,7 @@ import openai
 from openai import OpenAI
 from typing import Dict, Any
 import time
+from config import OPENAI_MODELS, MODEL_PARAMS
 
 class ModelTrainer:
     def __init__(self, api_key: str):
@@ -21,7 +22,7 @@ class ModelTrainer:
             # Create fine-tuning job
             job = self.client.fine_tuning.jobs.create(
                 training_file=file_id,
-                model="gpt-3.5-turbo"  # Updated to supported model
+                model=OPENAI_MODELS['trainer']
             )
             
             # Track the source

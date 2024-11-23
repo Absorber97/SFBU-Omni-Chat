@@ -12,14 +12,19 @@ from datetime import datetime
 import json
 from data_processor.source_tracker import SourceTracker
 import typing
-from typing import Optional
+from typing import Optional, Dict, List
+from utils.logging_handler import RealTimeLogger
 
 class SFBUApp:
     def __init__(self):
-        self._setup_logging()
+        self.logger = RealTimeLogger(__name__)
         self.pdf_extractor = PDFExtractor()
         self.url_extractor = URLExtractor()
-        self.jsonl_formatter = JSONLFormatter(output_dir="training_data")
+        self.jsonl_formatter = JSONLFormatter(
+            output_dir="training_data",
+            api_key=os.getenv('OPENAI_API_KEY'),
+            batch_size=5  # Process 5 items at a time
+        )
         
         # Check if API key exists
         if not OPENAI_API_KEY:
@@ -28,26 +33,6 @@ class SFBUApp:
         self.trainer = ModelTrainer(api_key=OPENAI_API_KEY)
         self.chat_manager: Optional[ChatManager] = None
         
-    def _setup_logging(self):
-        """Setup logging configuration"""
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        
-        # Console handler with custom formatter
-        console_handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
-        
-        # File handler
-        log_dir = "logs"
-        os.makedirs(log_dir, exist_ok=True)
-        file_handler = logging.FileHandler(
-            os.path.join(log_dir, f"sfbu_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
-        )
-        file_handler.setFormatter(formatter)
-        self.logger.addHandler(file_handler)
-
     def process_pdf(self, pdf_path):
         """Process PDF with logging"""
         try:
@@ -60,18 +45,61 @@ class SFBUApp:
             
             # Save with train/val split
             files = self.jsonl_formatter.save_jsonl(formatted_data, dataset_name)
+            if not files:  # Handle case when no data is saved
+                return (
+                    {"status": "error", "message": "No data to process"},
+                    [],  # Empty train_preview
+                    []   # Empty val_preview 
+                )
             
-            return {
-                'status': 'success',
-                'message': f"Processed {len(formatted_data)} entries",
-                'output_dir': self.jsonl_formatter.current_output_dir,
-                'train_file': files['train_file'],
-                'val_file': files['val_file'],
-                'metadata_file': files['metadata_file']
-            }
+            # Load preview data
+            preview_data = self._load_preview_data(files['train_file'], files['val_file'])
+            
+            return (
+                {
+                    'status': 'success',
+                    'message': f"Processed {len(formatted_data)} entries",
+                    'output_dir': self.jsonl_formatter.current_output_dir,
+                    'train_file': files['train_file'],
+                    'val_file': files['val_file'],
+                    'metadata_file': files['metadata_file']
+                },
+                preview_data['train_preview'],  # Already in list format for Dataframe
+                preview_data['val_preview']     # Already in list format for Dataframe
+            )
         except Exception as e:
             self.logger.error(f"Error processing PDF: {str(e)}")
-            return {'status': 'error', 'message': str(e)}
+            return (
+                {'status': 'error', 'message': str(e)},
+                [],  # Empty train_preview
+                []   # Empty val_preview
+            )
+
+    def _load_preview_data(self, train_file: str, val_file: str) -> Dict:
+        """Load preview data from JSONL files"""
+        preview_limit = 5  # Number of examples to show
+        
+        def load_jsonl_preview(file_path: str, limit: int) -> List[List]:
+            data = []
+            try:
+                with open(file_path, 'r') as f:
+                    for i, line in enumerate(f):
+                        if i >= limit:
+                            break
+                        item = json.loads(line)
+                        # Convert dict to list format for Dataframe
+                        data.append([
+                            item['prompt'],
+                            item['completion']
+                        ])
+            except Exception as e:
+                self.logger.error(f"Error loading preview data: {str(e)}")
+            return data
+
+        return {
+            'train_preview': load_jsonl_preview(train_file, preview_limit),
+            'val_preview': load_jsonl_preview(val_file, preview_limit)
+        }
 
     def process_url(self, url):
         """Process URL with logging"""
@@ -214,18 +242,8 @@ def create_interface():
     sfbu_logo_data_url = get_image_data_url(sfbu_logo_path)
 
     def update_logs():
-        """Update logs display"""
-        try:
-            if os.path.exists("logs"):
-                latest_log = max(
-                    [os.path.join("logs", f) for f in os.listdir("logs")],
-                    key=os.path.getctime
-                )
-                with open(latest_log, 'r') as f:
-                    return f.read()
-            return ""
-        except Exception as e:
-            return f"Error reading logs: {str(e)}"
+        """Get real-time logs"""
+        return app.logger.get_logs()
 
     def get_source_info():
         """Get information about processed and fine-tuned sources"""
@@ -427,7 +445,7 @@ def create_interface():
         process_pdf_btn.click(
             fn=app.process_pdf,
             inputs=[pdf_input],
-            outputs=[process_output]
+            outputs=[process_output, train_preview, val_preview]
         ).then(
             fn=update_logs,
             outputs=[log_output]

@@ -1,51 +1,21 @@
 from typing import Dict, Any, List
 from openai import OpenAI
+from config import OPENAI_MODELS, MODEL_PARAMS
 
 class ChatManager:
-    def __init__(self, model_id: str, api_key: str):
-        self.model_id = model_id
+    def __init__(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
-        self.conversation_history = []
         
-    def generate_response(self, user_input: str) -> Dict[str, Any]:
-        """
-        Generate response using the fine-tuned model
-        """
+    def generate_response(self, messages: List[Dict[str, str]]) -> str:
+        """Generate chat response using OpenAI"""
         try:
-            # Add user message to history
-            self.conversation_history.append({
-                "role": "user",
-                "content": user_input
-            })
-            
-            # Add system message for personality
-            system_message = {
-                "role": "system",
-                "content": "You are SFBU Omni Chat 🎓, a friendly and knowledgeable AI assistant for San Francisco Bay University. "
-                          "You're enthusiastic about helping students and always maintain a positive, supportive tone. "
-                          "You use occasional emojis to make conversations engaging but keep them professional. "
-                          "If you're not sure about something, you'll honestly say so and suggest contacting SFBU staff."
-            }
-            
-            # Generate response
             response = self.client.chat.completions.create(
-                model=self.model_id,
-                messages=[system_message] + self.conversation_history,
-                temperature=0.7,
-                max_tokens=150
+                model=OPENAI_MODELS['chat'],
+                messages=messages,
+                **MODEL_PARAMS['chat']
             )
             
-            # Add assistant response to history
-            assistant_response = response.choices[0].message.content
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": assistant_response
-            })
-            
-            return {
-                'status': 'success',
-                'response': assistant_response
-            }
+            return response.choices[0].message.content
             
         except Exception as e:
             return {
