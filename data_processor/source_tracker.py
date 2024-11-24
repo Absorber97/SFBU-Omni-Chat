@@ -1,8 +1,9 @@
 import json
 import os
-from typing import List, Dict
+from typing import List, Dict, Any
 from datetime import datetime
 from urllib.parse import urlparse
+import logging
 
 class SourceTracker:
     def __init__(self, tracking_file: str = "fine_tuned_sources.json"):
@@ -79,3 +80,48 @@ class SourceTracker:
             return processed_sources
         except Exception as e:
             raise Exception(f"Error reading processed sources: {str(e)}") 
+    
+    def get_training_datasets(self) -> List[Dict[str, Any]]:
+        """Get all available training datasets with their fine-tuning status"""
+        datasets = []
+        try:
+            if os.path.exists("training_data"):
+                for timestamp_dir in os.listdir("training_data"):
+                    dir_path = os.path.join("training_data", timestamp_dir)
+                    if os.path.isdir(dir_path):
+                        # Look for training files and metadata
+                        train_files = [f for f in os.listdir(dir_path) 
+                                     if f.endswith('_train.jsonl')]
+                        metadata_files = [f for f in os.listdir(dir_path) 
+                                        if f.endswith('_metadata.json')]
+                        
+                        for train_file in train_files:
+                            dataset_name = train_file.replace('_train.jsonl', '')
+                            metadata_file = f"{dataset_name}_metadata.json"
+                            
+                            if metadata_file in metadata_files:
+                                with open(os.path.join(dir_path, metadata_file), 'r') as f:
+                                    metadata = json.load(f)
+                                
+                                # Check if this dataset has been fine-tuned
+                                fine_tuned_sources = self.get_fine_tuned_sources()
+                                fine_tuning_status = next(
+                                    (source for source in fine_tuned_sources 
+                                     if source['file_path'] == os.path.join(dir_path, train_file)),
+                                    None
+                                )
+                                
+                                datasets.append({
+                                    'name': dataset_name,
+                                    'path': os.path.join(dir_path, train_file),
+                                    'timestamp': timestamp_dir,
+                                    'sources': metadata['sources'].get('friendly', []),
+                                    'fine_tuned': bool(fine_tuning_status),
+                                    'status': fine_tuning_status['status'] if fine_tuning_status else None,
+                                    'job_id': fine_tuning_status['job_id'] if fine_tuning_status else None
+                                })
+                                
+            return sorted(datasets, key=lambda x: x['timestamp'], reverse=True)
+        except Exception as e:
+            logging.error(f"Error getting training datasets: {str(e)}")
+            return []

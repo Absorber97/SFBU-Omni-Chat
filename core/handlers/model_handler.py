@@ -1,15 +1,22 @@
 from typing import Dict, List
 from data_processor.source_tracker import SourceTracker
 from config import OPENAI_API_KEY
+from datetime import datetime
 
 class ModelHandler:
     def __init__(self, app):
         self.app = app
         self.source_tracker = SourceTracker()
     
-    def start_fine_tuning(self, file_path) -> Dict:
+    def start_fine_tuning(self, file_path: str) -> Dict:
         """Start fine-tuning process"""
         try:
+            if not file_path:
+                return {
+                    'status': 'error',
+                    'message': 'No dataset selected'
+                }
+                
             self.app.logger.info(f"Starting fine-tuning with file: {file_path}")
             result = self.app.trainer.start_fine_tuning(file_path)
             
@@ -19,6 +26,14 @@ class ModelHandler:
                     'status': 'error',
                     'message': str(result['error'])
                 }
+            
+            # Update source tracker with fine-tuning status
+            self.source_tracker.add_fine_tuned_source({
+                'file_path': file_path,
+                'job_id': result['job_id'],
+                'status': 'started',
+                'timestamp': datetime.now().isoformat()
+            })
             
             self.app.logger.info(f"Fine-tuning started successfully. Job ID: {result['job_id']}")
             return {
