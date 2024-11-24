@@ -4,8 +4,9 @@ from typing import Any
 from .interface.data_processing_tab import create_data_processing_tab
 from .interface.fine_tuning_tab import create_fine_tuning_tab
 from .interface.chat_tab import create_chat_tab
+from .interface.rag_setup_tab import create_rag_setup_tab
 
-def create_interface(app: Any, data_handler: Any, model_handler: Any) -> gr.Blocks:
+def create_interface(app: Any, data_handler: Any, model_handler: Any, rag_handler: Any) -> gr.Blocks:
     """Create Gradio interface with all components"""
     
     def update_logs():
@@ -64,9 +65,10 @@ def create_interface(app: Any, data_handler: Any, model_handler: Any) -> gr.Bloc
             </style>
         """)
 
-        # Create tabs
+        # Create tabs in new order
         create_data_processing_tab(data_handler, update_logs, get_source_info)
         create_fine_tuning_tab(model_handler)
-        create_chat_tab(app, model_handler)
+        create_rag_setup_tab(rag_handler, model_handler)
+        create_chat_tab(app, model_handler, rag_handler)
 
     return interface 

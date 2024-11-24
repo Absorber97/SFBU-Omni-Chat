@@ -1,31 +1,73 @@
 import gradio as gr
 from typing import Any, Dict, List, Tuple
 
-def create_chat_tab(app: Any, model_handler: Any) -> gr.Tab:
-    """Create the Chat tab components"""
+def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
+    """Create the Chat tab components with RAG integration"""
     # Get avatar configuration from styling directly
     user_avatar, assistant_avatar = app.chat_styling.get_avatars()
     
-    def send_message(message: str, history: List[Tuple[str, str]], model_id: str) -> Tuple[List[Tuple[str, str]], Dict]:
+    def send_message(message: str, history: List[Tuple[str, str]], 
+                    model_id: str, use_rag: bool) -> Tuple[List[Tuple[str, str]], Dict]:
         if not model_id:
             return history, {"error": "Please select a model first"}
         
         try:
-            # Format messages for the API
-            messages = []
-            for human, ai in history:
-                messages.extend([
-                    {"role": "user", "content": human},
-                    {"role": "assistant", "content": ai}
+            if use_rag:
+                # Get relevant context from RAG
+                contexts = rag_handler.get_relevant_context(message)
+                
+                # Format contexts with scores for better context utilization
+                context_text = "\n\n".join([
+                    f"Relevant context (confidence: {c['score']:.2f}):\n"
+                    f"Q: {c['metadata']['question']}\n"
+                    f"A: {c['metadata']['answer']}"
+                    for c in contexts
                 ])
-            messages.append({"role": "user", "content": message})
+                
+                # Create a system message with context
+                system_message = (
+                    "You are a helpful assistant for San Francisco Bay University. "
+                    "Use the following relevant context to inform your response, "
+                    "but maintain a natural conversational tone:\n\n"
+                    f"{context_text}"
+                )
+                
+                # Format messages for the API with system context
+                messages = [{"role": "system", "content": system_message}]
+                
+                # Add chat history
+                for human, ai in history:
+                    messages.extend([
+                        {"role": "user", "content": human},
+                        {"role": "assistant", "content": ai}
+                    ])
+                
+                # Add current message
+                messages.append({"role": "user", "content": message})
+            else:
+                # Without RAG, use default system message
+                messages = [{"role": "system", "content": 
+                    "You are a helpful assistant for San Francisco Bay University."}]
+                
+                # Add chat history and current message
+                for human, ai in history:
+                    messages.extend([
+                        {"role": "user", "content": human},
+                        {"role": "assistant", "content": ai}
+                    ])
+                messages.append({"role": "user", "content": message})
             
-            # Get AI response
-            response = app.chat_manager.generate_response(messages)
+            # Get AI response using the selected model
+            response = app.chat_manager.generate_response(
+                messages=messages,
+                model_id=model_id,
+                temperature=0.7 if use_rag else 0.9  # Lower temperature with RAG for more focused responses
+            )
             
             # Update history
             history.append((message, response))
             return history, {"status": "success"}
+            
         except Exception as e:
             return history, {"error": str(e)}
 
@@ -38,7 +80,6 @@ def create_chat_tab(app: Any, model_handler: Any) -> gr.Tab:
             return gr.Dropdown(choices=["Error loading models"], value=None)
 
     with gr.Tab("💬 Chat") as tab:
-        # Single column layout for better chat experience
         with gr.Column(scale=1):
             # Model selector with refresh button
             with gr.Row():
@@ -67,12 +108,19 @@ def create_chat_tab(app: Any, model_handler: Any) -> gr.Tab:
                 scale=1
             )
             
-            # Input area at the bottom
+            # System info for status messages
+            system_info = gr.JSON(
+                label="System Status",
+                visible=True,
+                scale=1
+            )
+            
+            # Input area
             with gr.Row():
                 chat_input = gr.Textbox(
+                    label="Message",
                     placeholder="Type your message here...",
-                    show_label=False,
-                    container=False,
+                    container=True,
                     scale=4,
                     elem_id="chat-input"
                 )
@@ -82,86 +130,37 @@ def create_chat_tab(app: Any, model_handler: Any) -> gr.Tab:
                     scale=1,
                     elem_id="send-btn"
                 )
-            
-            # Additional controls in a row
-            with gr.Row():
                 clear_btn = gr.Button(
                     "🗑️ Clear History",
-                    variant="secondary",
-                    scale=1
-                )
-                system_info = gr.JSON(
-                    label="System Status",
-                    visible=True,
                     scale=1
                 )
 
-        # Add custom CSS for better styling
-        gr.HTML("""
-            <style>
-                /* Chat container styles */
-                #chat-history {
-                    border-radius: 10px;
-                    margin: 20px 0;
-                    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-                }
-                
-                /* Message styles */
-                .message {
-                    padding: 12px;
-                    margin: 8px 0;
-                    border-radius: 8px;
-                }
-                
-                /* Input area styles */
-                #chat-input {
-                    border-radius: 20px;
-                    padding: 12px 20px;
-                    margin: 10px 0;
-                }
-                
-                /* Send button styles */
-                #send-btn {
-                    border-radius: 20px;
-                    min-width: 100px;
-                }
-                
-                /* Custom scrollbar */
-                #chat-history::-webkit-scrollbar {
-                    width: 8px;
-                }
-                #chat-history::-webkit-scrollbar-track {
-                    background: #f1f1f1;
-                    border-radius: 4px;
-                }
-                #chat-history::-webkit-scrollbar-thumb {
-                    background: #888;
-                    border-radius: 4px;
-                }
-                #chat-history::-webkit-scrollbar-thumb:hover {
-                    background: #555;
-                }
-            </style>
-        """)
+        # Add RAG status and controls
+        with gr.Group():
+            gr.Markdown("### 🔍 RAG Status")
+            rag_status = gr.JSON(
+                label="Active RAG Index",
+                value={"active_index": "None"},
+                visible=True
+            )
+            
+            use_rag = gr.Checkbox(
+                label="🔍 Use RAG",
+                value=True,
+                info="Enable context-aware responses using RAG"
+            )
 
         # Event handlers
         send_btn.click(
-            fn=send_message,
-            inputs=[chat_input, chat_history, model_selector],
+            send_message,
+            inputs=[chat_input, chat_history, model_selector, use_rag],
             outputs=[chat_history, system_info]
-        ).then(
-            fn=lambda: "",  # Clear input after sending
-            outputs=[chat_input]
         )
 
-        # Enter key to send
         chat_input.submit(
-            fn=send_message,
-            inputs=[chat_input, chat_history, model_selector],
+            send_message,
+            inputs=[chat_input, chat_history, model_selector, use_rag],
             outputs=[chat_history, system_info]
-        ).then(
-            fn=lambda: "",  # Clear input after sending
-            outputs=[chat_input]
         )
 
         clear_btn.click(
