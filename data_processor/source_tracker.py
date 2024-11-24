@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from urllib.parse import urlparse
 import logging
@@ -8,37 +8,86 @@ import logging
 class SourceTracker:
     def __init__(self, tracking_file: str = "fine_tuned_sources.json"):
         self.tracking_file = tracking_file
+        self.logger = logging.getLogger(__name__)
+        self.sources: Dict[str, Dict[str, Any]] = self._load_sources()
     
-    def get_fine_tuned_sources(self) -> List[Dict[str, str]]:
-        """Get list of fine-tuned sources"""
+    def _load_sources(self) -> Dict[str, Dict[str, Any]]:
+        """Load sources from tracking file"""
         try:
             if os.path.exists(self.tracking_file):
                 with open(self.tracking_file, 'r') as f:
-                    sources = json.load(f)
-                    # Format display names for all sources
-                    for source in sources:
-                        if 'file_path' in source and 'display_name' not in source:
-                            source['display_name'] = self.format_source_path(source['file_path'])
-                    return sources
-            return []  # Return empty list if file doesn't exist
+                    data = json.load(f)
+                    # Convert list format to dictionary if needed
+                    if isinstance(data, list):
+                        # Convert old list format to new dict format
+                        sources_dict = {}
+                        for source in data:
+                            if 'file_path' in source:
+                                sources_dict[source['file_path']] = {
+                                    'fine_tuned': True,
+                                    'fine_tuning_status': source.get('status', 'unknown'),
+                                    'job_id': source.get('job_id'),
+                                    'base_model': source.get('base_model'),
+                                    'fine_tuning_timestamp': source.get('timestamp')
+                                }
+                        return sources_dict
+                    return data if isinstance(data, dict) else {}
+            return {}
         except Exception as e:
-            return []  # Return empty list on error
+            self.logger.error(f"Error loading sources: {str(e)}")
+            return {}
+    
+    def _save_sources(self):
+        """Save sources to tracking file"""
+        try:
+            with open(self.tracking_file, 'w') as f:
+                json.dump(self.sources, f, indent=2)
+        except Exception as e:
+            self.logger.error(f"Error saving sources: {str(e)}")
+    
+    def get_fine_tuned_sources(self) -> List[Dict[str, Any]]:
+        """Get list of fine-tuned sources"""
+        try:
+            sources_list = []
+            if not self.sources:
+                return []
+            
+            for file_path, info in self.sources.items():
+                source_info = {
+                    'file_path': file_path,
+                    'display_name': self.format_source_path(file_path),
+                    'status': info.get('fine_tuning_status', 'unknown'),
+                    'job_id': info.get('job_id'),
+                    'base_model': info.get('base_model'),
+                    'timestamp': info.get('fine_tuning_timestamp')
+                }
+                sources_list.append(source_info)
+            return sources_list
+        except Exception as e:
+            self.logger.error(f"Error getting fine-tuned sources: {str(e)}")
+            return []
     
     def add_fine_tuned_source(self, source_info: Dict[str, Any]):
         """Add or update fine-tuning information"""
-        dataset_path = source_info['file_path']
-        
-        # Update source info
-        if dataset_path in self.sources:
-            self.sources[dataset_path].update({
+        try:
+            if not source_info.get('file_path'):
+                self.logger.error("No file path provided in source info")
+                return
+            
+            dataset_path = source_info['file_path']
+            
+            # Update source info
+            self.sources[dataset_path] = {
                 'fine_tuned': True,
                 'fine_tuning_status': source_info.get('status', 'unknown'),
                 'job_id': source_info.get('job_id'),
                 'base_model': source_info.get('base_model'),
                 'fine_tuning_timestamp': source_info.get('timestamp')
-            })
-        
-        self._save_sources()
+            }
+            
+            self._save_sources()
+        except Exception as e:
+            self.logger.error(f"Error adding fine-tuned source: {str(e)}")
     
     def format_source_path(self, source_path: str) -> str:
         """Format source path for display - extract only the filename with extension"""
@@ -50,7 +99,8 @@ class SourceTracker:
             else:
                 # For files, use basename
                 return os.path.basename(source_path)
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Error formatting source path: {str(e)}")
             return source_path
     
     def get_processed_sources(self) -> List[Dict[str, str]]:
@@ -67,7 +117,7 @@ class SourceTracker:
                                 metadata = json.load(f)
                                 # Extract friendly sources from nested structure if needed
                                 friendly_sources = []
-                                if isinstance(metadata['sources'].get('friendly', []), list):
+                                if isinstance(metadata.get('sources', {}).get('friendly', []), list):
                                     friendly_sources = [
                                         src for src in metadata['sources']['friendly'] 
                                         if isinstance(src, str)  # Only include string URLs
@@ -79,7 +129,8 @@ class SourceTracker:
                                 })
             return processed_sources
         except Exception as e:
-            raise Exception(f"Error reading processed sources: {str(e)}") 
+            self.logger.error(f"Error reading processed sources: {str(e)}")
+            return []
     
     def get_training_datasets(self) -> List[Dict[str, Any]]:
         """Get all available training datasets with their fine-tuning status"""
@@ -123,7 +174,7 @@ class SourceTracker:
                                 
             return sorted(datasets, key=lambda x: x['timestamp'], reverse=True)
         except Exception as e:
-            logging.error(f"Error getting training datasets: {str(e)}")
+            self.logger.error(f"Error getting training datasets: {str(e)}")
             return []
     
     def get_dataset_metadata(self, dataset_path: str) -> Dict[str, Any]:

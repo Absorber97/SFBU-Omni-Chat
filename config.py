@@ -24,7 +24,7 @@ class ModelType(Enum):
 # Model naming configuration
 MODEL_CONFIG = {
     'base_name': 'gpt-4o-mini',
-    'fine_tuned_suffix': 'omni-sfbu',
+    'fine_tuned_suffix': 'sfbu-omni-tune',
     'separator': '-'  # Separator between base name and suffix
 }
 
@@ -32,7 +32,7 @@ MODEL_CONFIG = {
 def get_fine_tuned_model_name(base_name: str = None) -> str:
     """Generate full model name with suffix"""
     base = base_name or MODEL_CONFIG['base_name']
-    return f"{base}{MODEL_CONFIG['separator']}{MODEL_CONFIG['fine_tuned_suffix']}"
+    return f"{MODEL_CONFIG['fine_tuned_suffix']}"
 
 # Default model for all services
 DEFAULT_MODEL = MODEL_CONFIG['base_name']

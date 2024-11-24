@@ -43,7 +43,7 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         if not datasets:
             return pd.DataFrame(columns=[
                 'Type', 'Dataset', 'Sources', 'Examples', 
-                'Split', 'Created', 'Status'
+                'Split', 'Created'
             ])
         
         formatted_data = []
@@ -65,14 +65,13 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 'Sources': ', '.join(metadata.get('sources', {}).get('friendly', [])),
                 'Examples': str(metadata.get('total_examples', 0)),
                 'Split': split_str,
-                'Created': format_friendly_timestamp(metadata.get('timestamp', '')),
-                'Status': get_dataset_status(dataset)
+                'Created': format_friendly_timestamp(metadata.get('timestamp', ''))
             })
         
         df = pd.DataFrame(formatted_data)
         
         # Ensure all required columns exist and order
-        column_order = ['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status']
+        column_order = ['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created']
         for col in column_order:
             if col not in df.columns:
                 df[col] = ''
@@ -120,7 +119,7 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         gr.Markdown("### 📚 Available Datasets")
         datasets_table = gr.DataFrame(
             value=initial_table_data,
-            headers=['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status'],
+            headers=['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created'],
             label="Available Datasets",
             interactive=False,
             wrap=True,
@@ -148,7 +147,7 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 )
             
             with gr.Row():
-                refresh_btn = gr.Button("🔄 Refresh Datasets", size="sm")
+                refresh_btn = gr.Button("🔄 Refresh", size="sm")
                 fine_tune_btn = gr.Button(
                     "🚀 Start Fine-tuning", 
                     variant="primary",
@@ -158,10 +157,20 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         # Training Status Section
         gr.Markdown("### 📊 Training Status")
         with gr.Group():
-            training_status = gr.JSON(
-                label="Current Training Status",
-                visible=True
-            )
+            with gr.Row():
+                training_status = gr.JSON(
+                    label="Current Training Status",
+                    visible=True
+                )
+                openai_link = gr.HTML(
+                    value='<div style="text-align: right; padding: 10px;">'
+                          '<a href="https://platform.openai.com/finetune" '
+                          'target="_blank" style="text-decoration: none; '
+                          'padding: 8px 15px; border-radius: 5px; '
+                          'background-color: #2D3748; color: white; '
+                          'display: inline-flex; align-items: center; gap: 5px;">'
+                          '🔗 Visit OpenAI Fine-tuning Dashboard</a></div>'
+                )
             
             with gr.Row():
                 job_id_input = gr.Textbox(

@@ -8,7 +8,6 @@ from config import (
     OPENAI_MODELS, 
     MODEL_PARAMS, 
     MODEL_CONFIG, 
-    get_fine_tuned_model_name
 )
 from utils.batch_processor import BatchProcessor
 
@@ -131,7 +130,7 @@ class ModelTrainer:
             }
 
     def get_available_models(self) -> List[str]:
-        """Fetch available models for fine-tuning from OpenAI"""
+        """Fetch available models for fine-tuning"""
         try:
             models = self.client.models.list()
             
@@ -148,27 +147,27 @@ class ModelTrainer:
                 # Include GPT-4 base models
                 if model_id.startswith(base_name):
                     available_models.append(model_id)
-                # Include our fine-tuned models
-                elif suffix in model_id:
+                # Include our fine-tuned models - check if suffix is anywhere in the model ID
+                elif suffix.lower() in model_id.lower():
                     available_models.append(model_id)
+                    self.logger.info(f"Found fine-tuned model: {model_id}")
             
-            # Sort models: GPT-4 models first, then fine-tuned models
+            # Sort models: Base models first, then fine-tuned models
             def sort_key(model_name: str) -> tuple:
                 """Sort key function to order models"""
-                is_gpt4 = 1 if model_name.startswith(base_name) else 2
-                is_fine_tuned = 1 if suffix in model_name else 2
-                return (is_gpt4, is_fine_tuned, model_name)
+                is_base = 1 if model_name.startswith(base_name) else 2
+                return (is_base, model_name)
             
             sorted_models = sorted(available_models, key=sort_key)
             
             if not sorted_models:
-                self.logger.warning("No GPT-4 or fine-tuned models found")
+                self.logger.warning("No base or fine-tuned models found")
                 # Fallback to default model from config
                 return [base_name]
             
+            self.logger.info(f"Available models: {sorted_models}")
             return sorted_models
             
         except Exception as e:
             self.logger.error(f"Error fetching available models: {str(e)}")
-            # Return default model on error
-            return [MODEL_CONFIG['base_name']] 
+            return [base_name]  # Fallback to default model
