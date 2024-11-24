@@ -72,7 +72,7 @@ class ModelTrainer:
             job_params = {
                 'training_file': training_files.train_file_id,
                 'model': model,
-                'suffix': get_fine_tuned_model_name(),
+                'suffix': MODEL_CONFIG['fine_tuned_suffix'],
                 'hyperparameters': {
                     'n_epochs': MODEL_PARAMS['trainer'].get('n_epochs', 3)
                 }

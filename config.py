@@ -41,7 +41,7 @@ def get_fine_tuned_model_name(base_name: str) -> str:
     """Generate full model name with suffix"""
     if not base_name:
         base_name = MODEL_CONFIG['base_name']
-    return f"{base_name}{MODEL_CONFIG['separator']}{MODEL_CONFIG['fine_tuned_suffix']}"
+    return f"{MODEL_CONFIG['fine_tuned_suffix']}"
 
 # Default model for all services
 DEFAULT_MODEL = MODEL_CONFIG['base_name']
