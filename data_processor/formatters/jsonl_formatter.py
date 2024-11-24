@@ -66,13 +66,16 @@ class JSONLFormatter:
 
             # Prepare the prompt
             system_prompt = """
-            Generate 2-3 contextually relevant question-answer pairs from the given text.
+            Generate 4-5 contextually relevant question-answer pairs from the given text.
             Requirements:
             - Focus on important information useful for students or staff
+            - Include both factual and conceptual questions
             - Questions should be clear and direct
-            - Answers should be complete sentences
+            - Answers should be complete and detailed sentences
             - Avoid redundant or trivial questions
             - Each pair should be on a new line in format: Q: [question] | A: [answer]
+            - Try to cover different aspects of the content
+            - Include at least one question that requires synthesizing information
             """
 
             # Remove potentially conflicting parameters from MODEL_PARAMS
@@ -80,15 +83,15 @@ class JSONLFormatter:
             model_params.pop('temperature', None)
             model_params.pop('max_tokens', None)
             
-            # Make API call with clean parameters
+            # Make API call with clean parameters and increased max_tokens
             response = self.client.chat.completions.create(
                 model=OPENAI_MODELS['formatter'],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Context: {context}\nText: {text}"}
                 ],
-                temperature=0.7,
-                max_tokens=1000,
+                temperature=0.8,  # Slightly increased for more variety
+                max_tokens=2000,  # Increased to allow for more detailed responses
                 **model_params
             )
 

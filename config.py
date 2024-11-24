@@ -28,7 +28,7 @@ class ModelType(Enum):
 # Model naming configuration
 MODEL_CONFIG = {
     'base_name': 'gpt-4o-mini',
-    'fine_tuned_suffix': 'sfbu-omni-tune',
+    'fine_tuned_suffix': 'sfbu-omni-chat',
     'separator': '-',
     'avatars': {
         'user': 'Bayhawk.jpeg',

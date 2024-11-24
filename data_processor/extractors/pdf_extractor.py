@@ -30,17 +30,21 @@ class PDFExtractor:
                 
                 for sent in doc.sents:
                     if self._is_section_header(sent.text):
-                        # If we have content from previous section, save it
+                        # If we have content from previous section, process it
                         if section_content:
-                            extracted_data.append({
-                                'url': pdf_path,  # Use file path as source
-                                'title': os.path.basename(pdf_path).replace('.pdf', ''),
-                                'content': [{
-                                    'text': ' '.join(section_content),
-                                    'section': current_section,
-                                    'type': 'text'
-                                }]
-                            })
+                            # Split content into smaller chunks for better Q&A generation
+                            chunks = self._split_into_chunks(' '.join(section_content))
+                            for chunk in chunks:
+                                if self._is_meaningful_chunk(chunk):
+                                    extracted_data.append({
+                                        'url': pdf_path,
+                                        'title': os.path.basename(pdf_path).replace('.pdf', ''),
+                                        'content': [{
+                                            'text': chunk,
+                                            'section': current_section,
+                                            'type': 'text'
+                                        }]
+                                    })
                             section_content = []
                         current_section = sent.text.strip()
                     else:
@@ -48,18 +52,21 @@ class PDFExtractor:
                         if self._is_meaningful_content(sent.text):
                             section_content.append(sent.text.strip())
                 
-                # Add the last section of the page
+                # Process the last section of the page
                 if section_content:
-                    extracted_data.append({
-                        'url': pdf_path,  # Use file path as source
-                        'title': os.path.basename(pdf_path).replace('.pdf', ''),
-                        'content': [{
-                            'text': ' '.join(section_content),
-                            'section': current_section,
-                            'type': 'text'
-                        }]
-                    })
-                
+                    chunks = self._split_into_chunks(' '.join(section_content))
+                    for chunk in chunks:
+                        if self._is_meaningful_chunk(chunk):
+                            extracted_data.append({
+                                'url': pdf_path,
+                                'title': os.path.basename(pdf_path).replace('.pdf', ''),
+                                'content': [{
+                                    'text': chunk,
+                                    'section': current_section,
+                                    'type': 'text'
+                                }]
+                            })
+        
         return extracted_data
     
     def _clean_text(self, text: str) -> str:
@@ -109,4 +116,31 @@ class PDFExtractor:
             len(text.split()) > 3 and
             not text.isdigit() and
             not all(c.isdigit() or c.isspace() or c in '.,:-' for c in text)
+        )
+    
+    def _split_into_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+        """Split text into overlapping chunks for better context preservation"""
+        words = text.split()
+        chunks = []
+        
+        if len(words) <= chunk_size:
+            return [text]
+        
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk = ' '.join(words[i:i + chunk_size])
+            if chunk:
+                chunks.append(chunk)
+        
+        return chunks
+    
+    def _is_meaningful_chunk(self, text: str) -> bool:
+        """Check if a chunk contains enough meaningful content"""
+        text = text.strip()
+        # More detailed content validation
+        return (
+            len(text) >= 200 and  # Minimum length for good context
+            len(text.split()) >= 30 and  # Minimum word count
+            not text.isdigit() and
+            not all(c.isdigit() or c.isspace() or c in '.,:-' for c in text) and
+            sum(1 for c in text if c.isalpha()) / len(text) > 0.5  # At least 50% letters
         )

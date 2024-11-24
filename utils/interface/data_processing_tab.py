@@ -21,7 +21,7 @@ def create_data_processing_tab(
                     )
                     max_urls = gr.Slider(
                         minimum=1,
-                        maximum=10,
+                        maximum=30,
                         value=2,
                         step=1,
                         label="Max URLs to Process",
