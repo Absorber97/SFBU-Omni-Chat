@@ -72,17 +72,23 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         
         return sorted(set(models))  # Remove duplicates and sort
     
-    def refresh_datasets() -> pd.DataFrame:
-        """Refresh the datasets list"""
+    def refresh_datasets() -> Tuple[pd.DataFrame, List[str], List[str]]:
+        """Refresh the datasets list and dropdown options"""
         datasets = model_handler.source_tracker.get_training_datasets()
         base_models = get_available_base_models()
         
-        # Update dropdown choices
-        dataset_dropdown.choices = [d['path'] for d in datasets if not d['fine_tuned']]
-        base_model_dropdown.choices = base_models
-        base_model_dropdown.value = MODEL_CONFIG['base_name']
+        # Get only available (not fine-tuned) datasets for dropdown
+        available_datasets = [
+            (d['name'], d['path']) 
+            for d in datasets 
+            if not d['fine_tuned']
+        ]
         
-        return format_dataset_info(datasets)
+        return (
+            format_dataset_info(datasets),  # DataFrame for display
+            [path for _, path in available_datasets],  # Dataset paths for dropdown
+            base_models  # Base models for dropdown
+        )
     
     def start_fine_tuning(dataset_path: str, base_model: str) -> Dict[str, Any]:
         """Start fine-tuning with selected dataset and base model"""
@@ -93,10 +99,14 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
             
         return model_handler.start_fine_tuning(dataset_path, base_model)
     
+    # Get initial data
+    initial_table_data, initial_dataset_choices, initial_model_choices = refresh_datasets()
+    
     with gr.Tab("🔧 Fine-tuning") as tab:
         # Available Datasets Section
         gr.Markdown("### 📚 Available Datasets")
         datasets_table = gr.DataFrame(
+            value=initial_table_data,  # Set initial value
             headers=['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status'],
             label="Available Datasets",
             interactive=False,
@@ -110,11 +120,13 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
             with gr.Row():
                 dataset_dropdown = gr.Dropdown(
                     label="Select Dataset for Fine-tuning",
+                    choices=initial_dataset_choices,  # Set initial choices
                     interactive=True,
                     info="Choose a dataset to fine-tune the model"
                 )
                 base_model_dropdown = gr.Dropdown(
                     label="Select Base Model",
+                    choices=initial_model_choices,  # Set initial choices
                     value=MODEL_CONFIG['base_name'],
                     interactive=True,
                     info="Choose the base model for fine-tuning"
@@ -149,24 +161,29 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 )
 
         # Event handlers
+        def update_components(table_data, dataset_choices, model_choices):
+            """Update all components with new data"""
+            return {
+                datasets_table: table_data,
+                dataset_dropdown: gr.Dropdown(choices=dataset_choices),
+                base_model_dropdown: gr.Dropdown(choices=model_choices, value=MODEL_CONFIG['base_name'])
+            }
+
         refresh_btn.click(
-            refresh_datasets,
-            outputs=[datasets_table]
+            fn=refresh_datasets,
+            outputs=[datasets_table, dataset_dropdown, base_model_dropdown]
         )
         
         fine_tune_btn.click(
-            start_fine_tuning,
+            fn=start_fine_tuning,
             inputs=[dataset_dropdown, base_model_dropdown],
             outputs=[training_status]
         )
         
         check_status_btn.click(
-            model_handler.check_fine_tuning_status,
+            fn=model_handler.check_fine_tuning_status,
             inputs=[job_id_input],
             outputs=[training_status]
         )
-        
-        # Initial load
-        refresh_datasets()
         
     return tab
