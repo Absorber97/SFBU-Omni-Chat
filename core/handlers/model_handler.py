@@ -101,7 +101,7 @@ class ModelHandler:
                 model_id = model.id
                 # Include our fine-tuned models
                 if (suffix.lower() in model_id.lower() and 
-                    not (model_id.endswith('step-15') or model_id.endswith('step-30'))):
+                    not model_id.rpartition('step-')[2].isdigit()):
                     available_models.append({
                         'id': model_id,
                         'created': getattr(model, 'created', 0)  # Fallback to 0 if created not available
