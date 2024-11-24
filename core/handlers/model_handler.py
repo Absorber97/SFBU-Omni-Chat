@@ -132,7 +132,7 @@ class ModelHandler:
         """Initialize chat manager with selected model"""
         try:
             self.app.logger.info(f"Selecting model: {model_id}")
-            self.app.chat_manager = ChatManager(api_key=OPENAI_API_KEY)
+            self.app.chat_manager.set_model(model_id)
             return {
                 'status': 'success',
                 'message': f"Model {model_id} selected successfully"
