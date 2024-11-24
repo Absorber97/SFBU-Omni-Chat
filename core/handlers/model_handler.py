@@ -1,6 +1,8 @@
 from typing import Dict, List, Any
+from openai import OpenAI
 from data_processor.source_tracker import SourceTracker
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, MODEL_CONFIG, OPENAI_MODELS
+from chat_interface.chat_manager import ChatManager
 from datetime import datetime
 import os
 import json
@@ -9,9 +11,13 @@ class ModelHandler:
     def __init__(self, app):
         self.app = app
         self.source_tracker = SourceTracker()
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
     
-    def start_fine_tuning(self, file_path: str, base_model: str = None) -> Dict:
+    def start_fine_tuning(self, file_path: str, base_model: str) -> Dict:
         """Start fine-tuning process"""
+        if not base_model:
+            base_model = MODEL_CONFIG['base_name']
+        
         try:
             if not file_path:
                 return {
@@ -80,17 +86,47 @@ class ModelHandler:
                 'message': str(e)
             }
 
-    def load_available_models(self) -> List[str]:
-        """Get list of available fine-tuned models"""
+    def get_chat_models(self) -> List[str]:
+        """Get available models for chat interface"""
         try:
-            self.app.logger.info("Loading available fine-tuned models")
-            sources = self.source_tracker.get_fine_tuned_sources()
-            models = [s.get('fine_tuned_model') for s in sources 
-                     if s.get('status') == 'succeeded' and s.get('fine_tuned_model')]
-            return models
+            self.app.logger.info("Fetching available models for chat")
+            models = self.client.models.list()
+            
+            # Get our fine-tuning suffix from config
+            suffix = MODEL_CONFIG['fine_tuned_suffix']
+            
+            # Filter and collect models with creation dates
+            available_models = []
+            for model in models:
+                model_id = model.id
+                # Include our fine-tuned models
+                if (suffix.lower() in model_id.lower() and 
+                    not (model_id.endswith('step-15') or model_id.endswith('step-30'))):
+                    available_models.append({
+                        'id': model_id,
+                        'created': getattr(model, 'created', 0)  # Fallback to 0 if created not available
+                    })
+            
+            # Sort by creation date (descending) and extract just the model IDs
+            sorted_models = sorted(
+                available_models,
+                key=lambda x: x['created'],
+                reverse=True
+            )
+            
+            return [model['id'] for model in sorted_models]
+            
         except Exception as e:
-            self.app.logger.error(f"Error loading models: {str(e)}")
+            self.app.logger.error(f"Error fetching chat models: {str(e)}")
             return []
+
+    def load_available_models(self) -> List[str]:
+        """Load available models for chat interface"""
+        try:
+            return self.get_chat_models()
+        except Exception as e:
+            self.app.logger.error(f"Error loading available models: {str(e)}")
+            return ["No models available"]
 
     def select_model(self, model_id: str) -> Dict:
         """Initialize chat manager with selected model"""

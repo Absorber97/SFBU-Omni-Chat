@@ -8,6 +8,8 @@ from config import OPENAI_API_KEY
 import os
 import json
 from typing import Dict, List, Optional
+from chat_interface.chat_manager import ChatManager
+from chat_interface.chat_styling import ChatStyling
 
 class SFBUApp:
     def __init__(self):
@@ -17,10 +19,13 @@ class SFBUApp:
         # Initialize trainer with API key
         if not OPENAI_API_KEY:
             raise ValueError("OpenAI API key is required")
-        self.trainer = ModelTrainer(api_key=OPENAI_API_KEY)
+            
+        # Initialize chat components
+        self.chat_styling = ChatStyling()  # Initialize styling first
+        self.chat_manager = ChatManager(api_key=OPENAI_API_KEY)  # Initialize chat manager
         
         # Initialize other components
-        self.chat_manager = None  # Will be initialized when needed
+        self.trainer = ModelTrainer(api_key=OPENAI_API_KEY)
         self.source_tracker = SourceTracker()
         self.jsonl_formatter = JSONLFormatter(
             source_tracker=self.source_tracker

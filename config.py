@@ -1,20 +1,24 @@
 import os
 from dotenv import load_dotenv
-from typing import Dict, TypedDict
+from typing import Dict, TypedDict, List
 from enum import Enum
 
 # Load environment variables
 load_dotenv()
 
 # Type definitions for better type safety
-class ModelParams(TypedDict):
+class ModelParams(TypedDict, total=False):
     temperature: float
     max_tokens: int
+    n_epochs: int
+    batch_size: int
+    learning_rate_multiplier: float
 
 class ModelConfig(TypedDict):
     formatter: str
     trainer: str
     chat: str
+    allowed_base_models: List[str]
 
 class ModelType(Enum):
     FORMATTER = 'formatter'
@@ -25,23 +29,34 @@ class ModelType(Enum):
 MODEL_CONFIG = {
     'base_name': 'gpt-4o-mini',
     'fine_tuned_suffix': 'sfbu-omni-tune',
-    'separator': '-'  # Separator between base name and suffix
+    'separator': '-',
+    'avatars': {
+        'user': 'Bayhawk.jpeg',
+        'assistant': 'SFBU.jpeg'
+    }
 }
 
 # Helper function to get full model name
-def get_fine_tuned_model_name(base_name: str = None) -> str:
+def get_fine_tuned_model_name(base_name: str) -> str:
     """Generate full model name with suffix"""
-    base = base_name or MODEL_CONFIG['base_name']
-    return f"{MODEL_CONFIG['fine_tuned_suffix']}"
+    if not base_name:
+        base_name = MODEL_CONFIG['base_name']
+    return f"{base_name}{MODEL_CONFIG['separator']}{MODEL_CONFIG['fine_tuned_suffix']}"
 
 # Default model for all services
 DEFAULT_MODEL = MODEL_CONFIG['base_name']
 
 # Centralized model configuration
 OPENAI_MODELS: ModelConfig = {
-    ModelType.FORMATTER.value: MODEL_CONFIG['base_name'],  # Keep gpt-4o-mini
-    ModelType.TRAINER.value: None,  # Will be set dynamically from available models
-    ModelType.CHAT.value: MODEL_CONFIG['base_name'],  # Keep gpt-4o-mini
+    ModelType.FORMATTER.value: MODEL_CONFIG['base_name'],
+    ModelType.TRAINER.value: MODEL_CONFIG['base_name'],
+    ModelType.CHAT.value: MODEL_CONFIG['base_name'],
+    'allowed_base_models': [
+        'gpt-4',
+        'gpt-4-turbo-preview',
+        'gpt-3.5-turbo',
+        MODEL_CONFIG['base_name']
+    ]
 }
 
 # API Configuration
