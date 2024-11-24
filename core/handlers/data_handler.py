@@ -51,11 +51,28 @@ class DataHandler:
         """Format data for Gradio Dataframe display"""
         formatted_data = []
         for item in data:
-            # Convert each dictionary item to a list format
-            formatted_data.append([
-                item.get('prompt', ''),  # Question
-                item.get('completion', '')  # Answer
-            ])
+            if "messages" in item:
+                messages = item["messages"]
+                # Extract user question and assistant response
+                user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
+                assistant_msg = next((m["content"] for m in messages if m["role"] == "assistant"), "")
+                
+                formatted_data.append([
+                    user_msg,  # Question/Prompt
+                    assistant_msg,  # Answer/Completion
+                    item.get('source', ''),
+                    item.get('section', ''),
+                    item.get('page', '')
+                ])
+            else:
+                # Handle old format
+                formatted_data.append([
+                    item.get('prompt', ''),
+                    item.get('completion', ''),
+                    item.get('source', ''),
+                    item.get('section', ''),
+                    item.get('page', '')
+                ])
         return formatted_data
 
     def process_url(self, url: str, enable_recursion: bool = False, max_urls: int = 2) -> Tuple[Dict, List[List[str]], List[List[str]]]:

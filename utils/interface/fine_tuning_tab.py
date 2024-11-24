@@ -26,34 +26,33 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
 
     def format_dataset_info(datasets: List[Dict[str, Any]]) -> pd.DataFrame:
         """Format dataset information for display"""
-        data = []
-        for ds in datasets:
-            # Get metadata for additional information
-            metadata = model_handler.source_tracker.get_dataset_metadata(ds['path'])
-            
-            # Format status with emoji
-            status = "⏳ Available"
-            if ds['fine_tuned']:
-                status_text = ds['status'].title() if ds['status'] else 'Fine-tuned'
-                status = f"✅ {status_text}"
-            
-            # Format sources as user-friendly names
-            friendly_sources = metadata.get('sources', {}).get('friendly', [])
-            formatted_sources = [s.replace('-', ' ').title() for s in friendly_sources]
-            
-            data.append({
-                'Type': get_dataset_type(ds['name']),
-                'Dataset': ds['name'],
-                'Sources': ', '.join(formatted_sources),
-                'Examples': f"{metadata.get('total_examples', 0)} samples",
-                'Split': f"Train: {metadata.get('train_examples', 0)} / Val: {metadata.get('val_examples', 0)}",
-                'Created': format_friendly_timestamp(ds['timestamp']),
-                'Status': status
+        if not datasets:
+            # Return empty DataFrame with correct columns
+            return pd.DataFrame(columns=[
+                'Type', 'Dataset', 'Sources', 'Examples', 
+                'Split', 'Created', 'Status'
+            ])
+        
+        formatted_data = []
+        for dataset in datasets:
+            formatted_data.append({
+                'Type': 'Fine-tuning',
+                'Dataset': dataset.get('name', ''),
+                'Sources': ', '.join(dataset.get('sources', [])),
+                'Examples': str(dataset.get('examples', 0)),
+                'Split': f"{dataset.get('train_split', 0)}/{dataset.get('val_split', 0)}",
+                'Created': dataset.get('timestamp', ''),
+                'Status': dataset.get('status', 'Not Started')
             })
         
-        # Create DataFrame with specific column order
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(formatted_data)
+        
+        # Ensure all required columns exist
         column_order = ['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status']
+        for col in column_order:
+            if col not in df.columns:
+                df[col] = ''
+                
         return df[column_order]
     
     def get_available_base_models() -> List[str]:
@@ -93,6 +92,18 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
     initial_table_data, initial_dataset_choices, initial_model_choices = refresh_datasets()
     
     with gr.Tab("🔧 Fine-tuning") as tab:
+        # Add preview section above the datasets table
+        gr.Markdown("### 👀 Data Preview")
+        with gr.Row():
+            preview_table = gr.Dataframe(
+                headers=["Question", "Answer", "Source", "Section", "Page"],
+                label="Training Data Preview",
+                interactive=False,
+                wrap=True,
+                height=200,
+                visible=True
+            )
+
         # Available Datasets Section
         gr.Markdown("### 📚 Available Datasets")
         datasets_table = gr.DataFrame(
@@ -164,12 +175,42 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 )  # Update model dropdown
             )
 
+        def update_preview(dataset_path: str) -> pd.DataFrame:
+            """Update preview when dataset is selected"""
+            if not dataset_path:
+                return pd.DataFrame()
+            
+            preview_data = model_handler.get_dataset_preview(dataset_path)
+            return PreviewHandler.format_for_preview(preview_data)
+
+        # Add event handler for dataset selection
+        dataset_dropdown.change(
+            fn=update_preview,
+            inputs=[dataset_dropdown],
+            outputs=[preview_table]
+        )
+
+        # Update refresh handler to also update preview
+        def refresh_all():
+            table_data, dataset_choices, model_choices = refresh_datasets()
+            preview_data = pd.DataFrame() # Empty preview when refreshing
+            return (
+                table_data,
+                gr.Dropdown(choices=dataset_choices),
+                gr.Dropdown(
+                    choices=model_choices,
+                    value=model_choices[0] if model_choices else None
+                ),
+                preview_data
+            )
+
         refresh_btn.click(
-            fn=refresh_datasets,
+            fn=refresh_all,
             outputs=[
                 datasets_table,
                 dataset_dropdown,
-                base_model_dropdown
+                base_model_dropdown,
+                preview_table
             ]
         )
         

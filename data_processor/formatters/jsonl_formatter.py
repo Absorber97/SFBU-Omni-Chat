@@ -1,5 +1,5 @@
 from openai import OpenAI
-from typing import List, Dict, Tuple, Iterator
+from typing import List, Dict, Tuple, Iterator, Optional, Generator, Any
 import hashlib
 import os
 import logging
@@ -10,10 +10,10 @@ from itertools import islice
 from urllib.parse import urlparse
 
 class JSONLFormatter:
-    def __init__(self, output_dir: str = "training_data", api_key: str = None, batch_size: int = 5, source_tracker=None):
+    def __init__(self, output_dir: str = "training_data", api_key: Optional[str] = None, batch_size: int = 5, source_tracker: Optional[Any] = None):
         self.output_dir = output_dir
         self.logger = logging.getLogger(__name__)
-        self.current_output_dir = None
+        self.current_output_dir: Optional[str] = None
         self.client = OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
         self.batch_size = batch_size
         self.processed_hashes = self._load_existing_hashes()
@@ -38,61 +38,92 @@ class JSONLFormatter:
                                     hashes.add(content_hash)
         return hashes
 
-    def _batch_items(self, items: List[Dict[str, str]], batch_size: int) -> List[List[Dict[str, str]]]:
+    def _batch_items(self, items: List[Dict[str, str]], batch_size: int) -> Generator[List[Dict[str, str]], None, None]:
         """Split items into batches"""
         for i in range(0, len(items), batch_size):
             yield items[i:i + batch_size]
 
-    def _generate_qa_pairs_batch(self, batch: List[Dict[str, str]]) -> List[List[Tuple[str, str]]]:
-        """Generate Q&A pairs for a batch of items"""
+    def _generate_qa_pairs(self, text: str, context: str = "") -> List[Dict[str, Any]]:
+        """Generate Q&A pairs from text using OpenAI API"""
         try:
-            messages = []
-            for item in batch:
-                messages.append([
-                    {"role": "system", "content": """
-                    Generate 2-3 contextually relevant question-answer pairs from the given text.
-                    Requirements:
-                    - Focus on important information useful for students or staff
-                    - Questions should be clear and direct (no "Q:" prefix)
-                    - Answers should be complete sentences (no "A:" prefix)
-                    - Avoid redundant or trivial questions
-                    - Make questions natural and conversational
-                    
-                    Format: Return only the Q&A pairs, one per line, separated by ||| between question and answer.
-                    Example:
-                    What are the housing options available at SFBU? ||| SFBU offers non-traditional campus housing for both undergraduate and graduate students.
-                    How do I contact the Residential Life staff? ||| You can reach the Residential Life staff through email at residentiallife@sfbu.edu.
-                    """},
-                    {"role": "user", "content": f"Section: {item['section']}\n\nContent: {item['content']}"}
-                ])
+            # Clean the input text
+            text = self._clean_qa_text(text)
+            if len(text) < 50:  # Skip very short texts
+                return []
+
+            # Prepare the prompt
+            system_prompt = """
+            Generate 2-3 contextually relevant question-answer pairs from the given text.
+            Requirements:
+            - Focus on important information useful for students or staff
+            - Questions should be clear and direct
+            - Answers should be complete sentences
+            - Avoid redundant or trivial questions
+            - Each pair should be on a new line in format: Q: [question] | A: [answer]
+            """
+
+            # Remove potentially conflicting parameters from MODEL_PARAMS
+            model_params = MODEL_PARAMS['formatter'].copy()
+            model_params.pop('temperature', None)
+            model_params.pop('max_tokens', None)
             
-            # Create batch request
-            responses = self.client.chat.completions.create(
+            # Make API call with clean parameters
+            response = self.client.chat.completions.create(
                 model=OPENAI_MODELS['formatter'],
-                messages=messages,
-                **MODEL_PARAMS['formatter']
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Context: {context}\nText: {text}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000,
+                **model_params
             )
-            
-            qa_pairs_list = []
-            for response in responses.choices:
-                qa_text = response.message.content
-                qa_pairs = []
+
+            # Parse response
+            if not response.choices:
+                return []
                 
-                for line in qa_text.strip().split('\n'):
-                    if '|||' in line:
-                        q, a = line.split('|||')
-                        qa_pairs.append((
-                            self._clean_qa_text(q.strip()),
-                            self._clean_qa_text(a.strip())
-                        ))
+            qa_text = response.choices[0].message.content
+            if not qa_text:
+                return []
                 
-                qa_pairs_list.append(qa_pairs)
-            
-            return qa_pairs_list
-            
+            qa_pairs = []
+
+            # Process each line
+            for line in qa_text.strip().split('\n'):
+                if '|' in line:
+                    q_part, a_part = line.split('|')
+                    question = q_part.replace('Q:', '').strip()
+                    answer = a_part.replace('A:', '').strip()
+                    
+                    # Generate hash for deduplication
+                    content_hash = self._generate_hash(question + answer)
+                    
+                    if content_hash not in self.processed_hashes:
+                        self.processed_hashes.add(content_hash)
+                        # Format as chat messages
+                        qa_pairs.append({
+                            "messages": [
+                                {
+                                    "role": "system",
+                                    "content": "You are a helpful assistant that provides accurate information about San Francisco Bay University."
+                                },
+                                {
+                                    "role": "user",
+                                    "content": question
+                                },
+                                {
+                                    "role": "assistant",
+                                    "content": answer
+                                }
+                            ]
+                        })
+
+            return qa_pairs
+
         except Exception as e:
-            self.logger.error(f"OpenAI API batch error: {str(e)}")
-            return [[] for _ in batch]  # Return empty lists for failed batch
+            self.logger.error(f"Error generating Q&A pairs: {str(e)}")
+            return []
 
     def format_data(self, extracted_data: List[Dict]) -> Tuple[List[Dict], Dict]:
         """Format extracted data into JSONL format"""
@@ -227,6 +258,24 @@ class JSONLFormatter:
         """Save data to JSONL file"""
         with open(file_path, 'w') as f:
             for item in data:
+                # Ensure data is in the correct format
+                if "messages" not in item:
+                    # Convert old format to new format if necessary
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful assistant that provides accurate information about San Francisco Bay University."
+                        },
+                        {
+                            "role": "user",
+                            "content": item.get("prompt", "")
+                        },
+                        {
+                            "role": "assistant",
+                            "content": item.get("completion", "")
+                        }
+                    ]
+                    item = {"messages": messages}
                 f.write(json.dumps(item) + '\n')
 
     def _generate_hash(self, content: str) -> str:
@@ -264,67 +313,3 @@ class JSONLFormatter:
         # Implement preview update mechanism
         # This will be called by the Gradio interface
         pass
-
-    def _generate_qa_pairs(self, text: str, context: str = "") -> List[Dict[str, str]]:
-        """Generate Q&A pairs from text using OpenAI API"""
-        try:
-            # Clean the input text
-            text = self._clean_qa_text(text)
-            if len(text) < 50:  # Skip very short texts
-                return []
-
-            # Prepare the prompt
-            system_prompt = """
-            Generate 2-3 contextually relevant question-answer pairs from the given text.
-            Requirements:
-            - Focus on important information useful for students or staff
-            - Questions should be clear and direct
-            - Answers should be complete sentences
-            - Avoid redundant or trivial questions
-            - Each pair should be on a new line in format: Q: [question] | A: [answer]
-            """
-
-            # Remove potentially conflicting parameters from MODEL_PARAMS
-            model_params = MODEL_PARAMS['formatter'].copy()
-            params_to_remove = ['temperature', 'max_tokens']  # Add any other potentially conflicting params
-            for param in params_to_remove:
-                model_params.pop(param, None)
-            
-            # Make API call with clean parameters
-            response = self.client.chat.completions.create(
-                model=OPENAI_MODELS['formatter'],
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Context: {context}\nText: {text}"}
-                ],
-                temperature=0.7,
-                max_tokens=1000,
-                **model_params
-            )
-
-            # Parse response
-            qa_text = response.choices[0].message.content
-            qa_pairs = []
-
-            # Process each line
-            for line in qa_text.strip().split('\n'):
-                if '|' in line:
-                    q_part, a_part = line.split('|')
-                    question = q_part.replace('Q:', '').strip()
-                    answer = a_part.replace('A:', '').strip()
-                    
-                    # Generate hash for deduplication
-                    content_hash = self._generate_hash(question + answer)
-                    
-                    if content_hash not in self.processed_hashes:
-                        self.processed_hashes.add(content_hash)
-                        qa_pairs.append({
-                            "prompt": question,
-                            "completion": answer
-                        })
-
-            return qa_pairs
-
-        except Exception as e:
-            self.logger.error(f"Error generating Q&A pairs: {str(e)}")
-            return []

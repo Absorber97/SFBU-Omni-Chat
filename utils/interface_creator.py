@@ -17,8 +17,7 @@ def create_interface(app: Any, data_handler: Any, model_handler: Any) -> gr.Bloc
         try:
             tracker = model_handler.source_tracker
             return {
-                'processed_sources': tracker.get_processed_sources(),
-                'fine_tuned_sources': tracker.get_fine_tuned_sources()
+                'processed_sources': tracker.get_processed_sources()                
             }
         except Exception as e:
             return {'error': str(e)}

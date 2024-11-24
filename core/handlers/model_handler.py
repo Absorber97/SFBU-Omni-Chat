@@ -2,6 +2,8 @@ from typing import Dict, List
 from data_processor.source_tracker import SourceTracker
 from config import OPENAI_API_KEY
 from datetime import datetime
+import os
+import json
 
 class ModelHandler:
     def __init__(self, app):
@@ -113,5 +115,29 @@ class ModelHandler:
             return self.app.trainer.get_available_models()
         except Exception as e:
             self.app.logger.error(f"Error fetching models: {str(e)}")
+            return []
+
+    def get_dataset_preview(self, dataset_path: str, max_rows: int = 10) -> List[Dict]:
+        """Get preview data for a dataset"""
+        try:
+            if not os.path.exists(dataset_path):
+                return []
+            
+            preview_data = []
+            with open(dataset_path, 'r') as f:
+                for i, line in enumerate(f):
+                    if i >= max_rows:
+                        break
+                    try:
+                        item = json.loads(line.strip())
+                        preview_data.append(item)
+                    except json.JSONDecodeError:
+                        self.logger.warning(f"Invalid JSON in line {i+1}")
+                        continue
+                    
+            return preview_data
+        
+        except Exception as e:
+            self.logger.error(f"Error loading preview data: {str(e)}")
             return []
  
