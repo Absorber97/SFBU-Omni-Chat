@@ -72,12 +72,13 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         
         return sorted(set(models))  # Remove duplicates and sort
     
-    def refresh_datasets() -> Tuple[pd.DataFrame, List[str], List[str]]:
+    def refresh_datasets() -> Tuple[pd.DataFrame, List[Tuple[str, str]], List[str]]:
         """Refresh the datasets list and dropdown options"""
         datasets = model_handler.source_tracker.get_training_datasets()
         base_models = get_available_base_models()
         
         # Get only available (not fine-tuned) datasets for dropdown
+        # Create tuples of (display_name, path) for better UX
         available_datasets = [
             (d['name'], d['path']) 
             for d in datasets 
@@ -86,7 +87,7 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         
         return (
             format_dataset_info(datasets),  # DataFrame for display
-            [path for _, path in available_datasets],  # Dataset paths for dropdown
+            available_datasets,  # List of (name, path) tuples for dropdown
             base_models  # Base models for dropdown
         )
     
@@ -120,14 +121,15 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
             with gr.Row():
                 dataset_dropdown = gr.Dropdown(
                     label="Select Dataset for Fine-tuning",
-                    choices=initial_dataset_choices,  # Set initial choices
+                    choices=[(name, path) for name, path in initial_dataset_choices],  # Use tuples
                     interactive=True,
-                    info="Choose a dataset to fine-tune the model"
+                    info="Choose a dataset to fine-tune the model",
+                    type="value"  # Use value type to store the path
                 )
                 base_model_dropdown = gr.Dropdown(
                     label="Select Base Model",
-                    choices=initial_model_choices,  # Set initial choices
-                    value=MODEL_CONFIG['base_name'],
+                    choices=initial_model_choices,
+                    value=MODEL_CONFIG['base_name'],  # Set initial value
                     interactive=True,
                     info="Choose the base model for fine-tuning"
                 )
@@ -165,8 +167,14 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
             """Update all components with new data"""
             return {
                 datasets_table: table_data,
-                dataset_dropdown: gr.Dropdown(choices=dataset_choices),
-                base_model_dropdown: gr.Dropdown(choices=model_choices, value=MODEL_CONFIG['base_name'])
+                dataset_dropdown: gr.Dropdown(
+                    choices=[(name, path) for name, path in dataset_choices],
+                    type="value"
+                ),
+                base_model_dropdown: gr.Dropdown(
+                    choices=model_choices,
+                    value=MODEL_CONFIG['base_name']
+                )
             }
 
         refresh_btn.click(
