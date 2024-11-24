@@ -31,11 +31,24 @@ class JSONLFormatter:
                             file_path = os.path.join(dir_path, file)
                             with open(file_path, 'r') as f:
                                 for line in f:
-                                    data = json.loads(line)
-                                    content_hash = self._generate_hash(
-                                        data['prompt'] + data['completion']
-                                    )
-                                    hashes.add(content_hash)
+                                    try:
+                                        data = json.loads(line)
+                                        if "messages" in data:
+                                            # New format
+                                            messages = data["messages"]
+                                            user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
+                                            assistant_msg = next((m["content"] for m in messages if m["role"] == "assistant"), "")
+                                            content_hash = self._generate_hash(user_msg + assistant_msg)
+                                        else:
+                                            # Old format
+                                            prompt = data.get('prompt', '')
+                                            completion = data.get('completion', '')
+                                            content_hash = self._generate_hash(prompt + completion)
+                                        
+                                        hashes.add(content_hash)
+                                    except (json.JSONDecodeError, KeyError) as e:
+                                        self.logger.warning(f"Error processing line in {file_path}: {str(e)}")
+                                        continue
         return hashes
 
     def _batch_items(self, items: List[Dict[str, str]], batch_size: int) -> Generator[List[Dict[str, str]], None, None]:

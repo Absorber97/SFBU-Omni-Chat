@@ -24,21 +24,21 @@ class SourceTracker:
         except Exception as e:
             return []  # Return empty list on error
     
-    def add_fine_tuned_source(self, source_info: Dict[str, str]):
-        """Add a new fine-tuned source"""
-        try:
-            sources = self.get_fine_tuned_sources()  # Get existing or empty list
-            source_info['timestamp'] = datetime.now().isoformat()
-            # Format the file path if it exists
-            if 'file_path' in source_info:
-                source_info['display_name'] = self.format_source_path(source_info['file_path'])
-            sources.append(source_info)
-            
-            # Only create/write file when actually adding a source
-            with open(self.tracking_file, 'w') as f:
-                json.dump(sources, f, indent=2)
-        except Exception as e:
-            raise Exception(f"Error adding fine-tuned source: {str(e)}")
+    def add_fine_tuned_source(self, source_info: Dict[str, Any]):
+        """Add or update fine-tuning information"""
+        dataset_path = source_info['file_path']
+        
+        # Update source info
+        if dataset_path in self.sources:
+            self.sources[dataset_path].update({
+                'fine_tuned': True,
+                'fine_tuning_status': source_info.get('status', 'unknown'),
+                'job_id': source_info.get('job_id'),
+                'base_model': source_info.get('base_model'),
+                'fine_tuning_timestamp': source_info.get('timestamp')
+            })
+        
+        self._save_sources()
     
     def format_source_path(self, source_path: str) -> str:
         """Format source path for display - extract only the filename with extension"""
@@ -92,15 +92,14 @@ class SourceTracker:
                         # Look for training files and metadata
                         train_files = [f for f in os.listdir(dir_path) 
                                      if f.endswith('_train.jsonl')]
-                        metadata_files = [f for f in os.listdir(dir_path) 
-                                        if f.endswith('_metadata.json')]
                         
                         for train_file in train_files:
                             dataset_name = train_file.replace('_train.jsonl', '')
                             metadata_file = f"{dataset_name}_metadata.json"
+                            metadata_path = os.path.join(dir_path, metadata_file)
                             
-                            if metadata_file in metadata_files:
-                                with open(os.path.join(dir_path, metadata_file), 'r') as f:
+                            if os.path.exists(metadata_path):
+                                with open(metadata_path, 'r') as f:
                                     metadata = json.load(f)
                                 
                                 # Check if this dataset has been fine-tuned
@@ -118,7 +117,8 @@ class SourceTracker:
                                     'sources': metadata['sources'].get('friendly', []),
                                     'fine_tuned': bool(fine_tuning_status),
                                     'status': fine_tuning_status['status'] if fine_tuning_status else None,
-                                    'job_id': fine_tuning_status['job_id'] if fine_tuning_status else None
+                                    'job_id': fine_tuning_status['job_id'] if fine_tuning_status else None,
+                                    'metadata': metadata  # Include full metadata
                                 })
                                 
             return sorted(datasets, key=lambda x: x['timestamp'], reverse=True)

@@ -19,15 +19,28 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
     def get_dataset_type(name: str) -> str:
         """Determine dataset type from name"""
         if name.startswith('url_'):
-            return '🌐 URL'
+            return '🌐 Web'
         elif name.startswith('pdf_'):
             return '📄 PDF'
         return '❓ Unknown'
 
+    def get_dataset_status(dataset: Dict[str, Any]) -> str:
+        """Get user-friendly status for dataset"""
+        if dataset.get('fine_tuned'):
+            status = dataset.get('fine_tuning_status', '').lower()
+            if status == 'succeeded':
+                return '✅ Fine-tuning Complete'
+            elif status == 'failed':
+                return '❌ Fine-tuning Failed'
+            elif status == 'started':
+                return '🔄 Fine-tuning in Progress'
+            else:
+                return '❓ Unknown Status'
+        return '🟢 Available for Fine-tuning'
+
     def format_dataset_info(datasets: List[Dict[str, Any]]) -> pd.DataFrame:
         """Format dataset information for display"""
         if not datasets:
-            # Return empty DataFrame with correct columns
             return pd.DataFrame(columns=[
                 'Type', 'Dataset', 'Sources', 'Examples', 
                 'Split', 'Created', 'Status'
@@ -35,19 +48,30 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         
         formatted_data = []
         for dataset in datasets:
+            # Load metadata from json file
+            metadata = model_handler.load_dataset_metadata(dataset['path'])
+            if not metadata:
+                continue
+
+            # Calculate split percentage
+            total = metadata.get('total_examples', 0)
+            train = metadata.get('train_examples', 0)
+            val = metadata.get('val_examples', 0)
+            split_str = f"{train}/{val}" if total > 0 else "0/0"
+
             formatted_data.append({
-                'Type': 'Fine-tuning',
+                'Type': get_dataset_type(dataset.get('name', '')),
                 'Dataset': dataset.get('name', ''),
-                'Sources': ', '.join(dataset.get('sources', [])),
-                'Examples': str(dataset.get('examples', 0)),
-                'Split': f"{dataset.get('train_split', 0)}/{dataset.get('val_split', 0)}",
-                'Created': dataset.get('timestamp', ''),
-                'Status': dataset.get('status', 'Not Started')
+                'Sources': ', '.join(metadata.get('sources', {}).get('friendly', [])),
+                'Examples': str(metadata.get('total_examples', 0)),
+                'Split': split_str,
+                'Created': format_friendly_timestamp(metadata.get('timestamp', '')),
+                'Status': get_dataset_status(dataset)
             })
         
         df = pd.DataFrame(formatted_data)
         
-        # Ensure all required columns exist
+        # Ensure all required columns exist and order
         column_order = ['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status']
         for col in column_order:
             if col not in df.columns:
@@ -92,22 +116,10 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
     initial_table_data, initial_dataset_choices, initial_model_choices = refresh_datasets()
     
     with gr.Tab("🔧 Fine-tuning") as tab:
-        # Add preview section above the datasets table
-        gr.Markdown("### 👀 Data Preview")
-        with gr.Row():
-            preview_table = gr.Dataframe(
-                headers=["Question", "Answer", "Source", "Section", "Page"],
-                label="Training Data Preview",
-                interactive=False,
-                wrap=True,
-                height=200,
-                visible=True
-            )
-
         # Available Datasets Section
         gr.Markdown("### 📚 Available Datasets")
         datasets_table = gr.DataFrame(
-            value=initial_table_data,  # Set initial value
+            value=initial_table_data,
             headers=['Type', 'Dataset', 'Sources', 'Examples', 'Split', 'Created', 'Status'],
             label="Available Datasets",
             interactive=False,
@@ -164,53 +176,12 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 )
 
         # Event handlers
-        def update_ui(table_data, dataset_choices, model_choices):
-            """Update UI components with new data"""
-            return (
-                table_data,  # Update table
-                gr.Dropdown(choices=dataset_choices),  # Update dataset dropdown
-                gr.Dropdown(
-                    choices=model_choices,
-                    value=model_choices[0] if model_choices else None
-                )  # Update model dropdown
-            )
-
-        def update_preview(dataset_path: str) -> pd.DataFrame:
-            """Update preview when dataset is selected"""
-            if not dataset_path:
-                return pd.DataFrame()
-            
-            preview_data = model_handler.get_dataset_preview(dataset_path)
-            return PreviewHandler.format_for_preview(preview_data)
-
-        # Add event handler for dataset selection
-        dataset_dropdown.change(
-            fn=update_preview,
-            inputs=[dataset_dropdown],
-            outputs=[preview_table]
-        )
-
-        # Update refresh handler to also update preview
-        def refresh_all():
-            table_data, dataset_choices, model_choices = refresh_datasets()
-            preview_data = pd.DataFrame() # Empty preview when refreshing
-            return (
-                table_data,
-                gr.Dropdown(choices=dataset_choices),
-                gr.Dropdown(
-                    choices=model_choices,
-                    value=model_choices[0] if model_choices else None
-                ),
-                preview_data
-            )
-
         refresh_btn.click(
-            fn=refresh_all,
+            fn=refresh_datasets,
             outputs=[
                 datasets_table,
                 dataset_dropdown,
-                base_model_dropdown,
-                preview_table
+                base_model_dropdown
             ]
         )
         

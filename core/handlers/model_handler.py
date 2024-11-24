@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Any
 from data_processor.source_tracker import SourceTracker
 from config import OPENAI_API_KEY
 from datetime import datetime
@@ -117,27 +117,25 @@ class ModelHandler:
             self.app.logger.error(f"Error fetching models: {str(e)}")
             return []
 
-    def get_dataset_preview(self, dataset_path: str, max_rows: int = 10) -> List[Dict]:
-        """Get preview data for a dataset"""
+    def load_dataset_metadata(self, dataset_path: str) -> Dict[str, Any]:
+        """Load metadata for a dataset"""
         try:
-            if not os.path.exists(dataset_path):
-                return []
+            # Convert dataset path to metadata path
+            # e.g., training_data/20241123_184906/pdf_20241123_184906_train.jsonl 
+            # -> training_data/20241123_184906/pdf_20241123_184906_metadata.json
+            dir_path = os.path.dirname(dataset_path)
+            file_name = os.path.basename(dataset_path).replace('_train.jsonl', '_metadata.json')
+            metadata_path = os.path.join(dir_path, file_name)
             
-            preview_data = []
-            with open(dataset_path, 'r') as f:
-                for i, line in enumerate(f):
-                    if i >= max_rows:
-                        break
-                    try:
-                        item = json.loads(line.strip())
-                        preview_data.append(item)
-                    except json.JSONDecodeError:
-                        self.logger.warning(f"Invalid JSON in line {i+1}")
-                        continue
-                    
-            return preview_data
-        
+            if not os.path.exists(metadata_path):
+                self.app.logger.warning(f"Metadata file not found: {metadata_path}")
+                return {}
+            
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                return metadata
+            
         except Exception as e:
-            self.logger.error(f"Error loading preview data: {str(e)}")
-            return []
+            self.app.logger.error(f"Error loading dataset metadata: {str(e)}")
+            return {}
  
