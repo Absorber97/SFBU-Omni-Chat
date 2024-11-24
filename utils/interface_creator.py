@@ -69,6 +69,21 @@ def create_interface(app, data_handler, model_handler):
                     pdf_input = gr.File(label="📒 Upload PDF")
                     process_pdf_btn = gr.Button("📥 Process PDF")
                     url_input = gr.Textbox(label="🔗 Enter URL")
+                    with gr.Row():
+                        enable_recursion = gr.Checkbox(
+                            label="Enable Link Recursion",
+                            value=False,
+                            info="Extract data from linked pages within the same domain"
+                        )
+                        max_urls = gr.Slider(
+                            minimum=1,
+                            maximum=10,
+                            value=2,
+                            step=1,
+                            label="Max URLs to Process",
+                            visible=False,  # Initially hidden
+                            info="Maximum number of URLs to process when recursion is enabled"
+                        )
                     process_url_btn = gr.Button("🌐 Process URL")
             
             with gr.Row():
@@ -149,7 +164,7 @@ def create_interface(app, data_handler, model_handler):
 
         process_url_btn.click(
             fn=data_handler.process_url,
-            inputs=[url_input],
+            inputs=[url_input, enable_recursion, max_urls],
             outputs=[process_output, train_preview, val_preview]
         ).then(
             fn=update_logs,
@@ -216,6 +231,13 @@ def create_interface(app, data_handler, model_handler):
             fn=model_handler.select_model,
             inputs=[model_selector],
             outputs=[system_info]
+        )
+
+        # Update max_urls visibility based on recursion checkbox
+        enable_recursion.change(
+            fn=lambda x: gr.update(visible=x),
+            inputs=[enable_recursion],
+            outputs=[max_urls]
         )
 
     return interface 

@@ -1,50 +1,47 @@
 from data_processor.extractors.pdf_extractor import PDFExtractor
 from data_processor.extractors.url_extractor import URLExtractor
 from data_processor.formatters.jsonl_formatter import JSONLFormatter
-from data_processor.fine_tuning.trainer import ModelTrainer
-from chat_interface.chat_manager import ChatManager
-from config import OPENAI_API_KEY
-from utils.logging_handler import RealTimeLogger
-from typing import Optional, Dict, List
+from data_processor.source_tracker import SourceTracker
+from utils.logger import Logger
 import os
 import json
-from datetime import datetime
+from typing import Dict, List
 
 class SFBUApp:
     def __init__(self):
-        self.logger = RealTimeLogger(__name__)
+        self.logger = Logger()
+        self.source_tracker = SourceTracker()
+        self.jsonl_formatter = JSONLFormatter(
+            source_tracker=self.source_tracker
+        )
         self.pdf_extractor = PDFExtractor()
         self.url_extractor = URLExtractor()
-        self.jsonl_formatter = JSONLFormatter(
-            output_dir="training_data",
-            api_key=os.getenv('OPENAI_API_KEY'),
-            batch_size=5
-        )
         
-        if not OPENAI_API_KEY:
-            raise ValueError("OpenAI API key not found in environment variables")
+    def _load_preview_data(self, train_file: str, val_file: str) -> Dict[str, List[Dict]]:
+        """Load preview data from training and validation files"""
+        preview_data = {
+            'train_preview': [],
+            'val_preview': []
+        }
         
-        self.trainer = ModelTrainer(api_key=OPENAI_API_KEY)
-        self.chat_manager: Optional[ChatManager] = None
-
-    def _load_preview_data(self, train_file: str, val_file: str) -> Dict:
-        """Load preview data from JSONL files"""
-        preview_limit = 5
-        
-        def load_jsonl_preview(file_path: str, limit: int) -> List[List]:
-            data = []
-            try:
-                with open(file_path, 'r') as f:
+        try:
+            # Load a few examples from train file
+            if os.path.exists(train_file):
+                with open(train_file, 'r') as f:
                     for i, line in enumerate(f):
-                        if i >= limit:
+                        if i >= 5:  # Only load first 5 examples
                             break
-                        item = json.loads(line)
-                        data.append([item['prompt'], item['completion']])
-            except Exception as e:
-                self.logger.error(f"Error loading preview data: {str(e)}")
-            return data
-
-        return {
-            'train_preview': load_jsonl_preview(train_file, preview_limit),
-            'val_preview': load_jsonl_preview(val_file, preview_limit)
-        } 
+                        preview_data['train_preview'].append(json.loads(line))
+                        
+            # Load a few examples from val file
+            if os.path.exists(val_file):
+                with open(val_file, 'r') as f:
+                    for i, line in enumerate(f):
+                        if i >= 3:  # Only load first 3 examples
+                            break
+                        preview_data['val_preview'].append(json.loads(line))
+                        
+        except Exception as e:
+            self.logger.error(f"Error loading preview data: {str(e)}")
+            
+        return preview_data 

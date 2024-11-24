@@ -2,17 +2,16 @@ import PyPDF2
 from typing import List, Dict
 import spacy
 import re
+import os
 
 class PDFExtractor:
     def __init__(self):
         # Load spaCy model for text processing
         self.nlp = spacy.load("en_core_web_sm")
         
-    def extract_text(self, pdf_path: str) -> List[Dict[str, str]]:
+    def extract_text(self, pdf_path: str) -> List[Dict]:
         """Extract text from PDF with meaningful context preservation"""
         extracted_data = []
-        current_section = ""
-        section_content = []
         
         with open(pdf_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
@@ -26,16 +25,21 @@ class PDFExtractor:
                 # Process text to identify sections
                 doc = self.nlp(cleaned_text)
                 
+                current_section = f"Page {page_num + 1}"
+                section_content = []
+                
                 for sent in doc.sents:
-                    # Identify potential section headers
                     if self._is_section_header(sent.text):
                         # If we have content from previous section, save it
                         if section_content:
                             extracted_data.append({
-                                'section': current_section,
-                                'content': ' '.join(section_content),
-                                'page': page_num,
-                                'source': pdf_path
+                                'url': pdf_path,  # Use file path as source
+                                'title': os.path.basename(pdf_path).replace('.pdf', ''),
+                                'content': [{
+                                    'text': ' '.join(section_content),
+                                    'section': current_section,
+                                    'type': 'text'
+                                }]
                             })
                             section_content = []
                         current_section = sent.text.strip()
@@ -44,14 +48,17 @@ class PDFExtractor:
                         if self._is_meaningful_content(sent.text):
                             section_content.append(sent.text.strip())
                 
-            # Don't forget to add the last section
-            if section_content:
-                extracted_data.append({
-                    'section': current_section,
-                    'content': ' '.join(section_content),
-                    'page': page_num,
-                    'source': pdf_path
-                })
+                # Add the last section of the page
+                if section_content:
+                    extracted_data.append({
+                        'url': pdf_path,  # Use file path as source
+                        'title': os.path.basename(pdf_path).replace('.pdf', ''),
+                        'content': [{
+                            'text': ' '.join(section_content),
+                            'section': current_section,
+                            'type': 'text'
+                        }]
+                    })
                 
         return extracted_data
     

@@ -2,6 +2,7 @@ import json
 import os
 from typing import List, Dict
 from datetime import datetime
+from urllib.parse import urlparse
 
 class SourceTracker:
     def __init__(self, tracking_file: str = "fine_tuned_sources.json"):
@@ -41,17 +42,15 @@ class SourceTracker:
     def format_source_path(self, source_path: str) -> str:
         """Format source path for display - extract only the filename with extension"""
         try:
-            # Get just the filename with extension
-            filename = os.path.basename(source_path)
-            # Clean up any special characters or extra spaces
-            cleaned_name = filename.strip()
-            return cleaned_name
-        except Exception:
-            # If anything goes wrong, return just the basename
-            try:
+            if source_path.startswith(('http://', 'https://')):
+                # For URLs, use domain and path
+                parsed = urlparse(source_path)
+                return f"{parsed.netloc}{parsed.path}"
+            else:
+                # For files, use basename
                 return os.path.basename(source_path)
-            except:
-                return source_path  # Last resort: return original
+        except Exception:
+            return source_path
     
     def get_processed_sources(self) -> List[Dict[str, str]]:
         """Get list of processed sources with friendly names only"""
@@ -65,13 +64,18 @@ class SourceTracker:
                         for metadata_file in metadata_files:
                             with open(os.path.join(dir_path, metadata_file), 'r') as f:
                                 metadata = json.load(f)
-                                # Only use friendly names for display
-                                for friendly in metadata['sources'].get('friendly', []):
-                                    processed_sources.append({
-                                        'source': friendly,  # Only show friendly name
-                                        'timestamp': metadata['timestamp'],
-                                        'dataset_name': metadata_file.replace('_metadata.json', '')
-                                    })
+                                # Extract friendly sources from nested structure if needed
+                                friendly_sources = []
+                                if isinstance(metadata['sources'].get('friendly', []), list):
+                                    friendly_sources = [
+                                        src for src in metadata['sources']['friendly'] 
+                                        if isinstance(src, str)  # Only include string URLs
+                                    ]
+                                processed_sources.append({
+                                    'source': friendly_sources,
+                                    'timestamp': timestamp_dir,
+                                    'dataset_name': metadata_file.replace('_metadata.json', '')
+                                })
             return processed_sources
         except Exception as e:
             raise Exception(f"Error reading processed sources: {str(e)}") 

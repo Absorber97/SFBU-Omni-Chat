@@ -10,13 +10,14 @@ from itertools import islice
 from urllib.parse import urlparse
 
 class JSONLFormatter:
-    def __init__(self, output_dir: str = "training_data", api_key: str = None, batch_size: int = 5):
+    def __init__(self, output_dir: str = "training_data", api_key: str = None, batch_size: int = 5, source_tracker=None):
         self.output_dir = output_dir
         self.logger = logging.getLogger(__name__)
         self.current_output_dir = None
         self.client = OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
         self.batch_size = batch_size
         self.processed_hashes = self._load_existing_hashes()
+        self.source_tracker = source_tracker
     
     def _load_existing_hashes(self) -> set:
         """Load hashes from all existing training data"""
@@ -89,38 +90,64 @@ class JSONLFormatter:
             self.logger.error(f"OpenAI API batch error: {str(e)}")
             return [[] for _ in batch]  # Return empty lists for failed batch
 
-    def format_data(self, data: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], Dict[str, str]]:
+    def format_data(self, extracted_data: List[Dict]) -> Tuple[List[Dict], Dict]:
         """Format extracted data into JSONL format"""
         formatted_data = []
-        source_metadata = {}  # Track sources with both versions
+        source_metadata = {
+            "timestamp": datetime.now().strftime('%Y%m%d_%H%M%S'),
+            "sources": {
+                "original": [],
+                "friendly": []
+            }
+        }
         
-        for batch in self._batch_items(data, self.batch_size):
-            try:
-                qa_pairs = self._generate_qa_pairs_batch(batch)
-                
-                for item, pairs in zip(batch, qa_pairs):
-                    # Track source information for metadata
-                    original_source = item['source']
-                    friendly_source = self._get_friendly_source_name(original_source)
-                    source_metadata[original_source] = friendly_source
+        try:
+            for data in extracted_data:
+                if not data:
+                    continue
                     
-                    for prompt, completion in pairs:
-                        content_hash = self._generate_hash(prompt + completion)
-                        
-                        if content_hash not in self.processed_hashes:
-                            # Only include prompt and completion in training data
-                            entry = {
-                                'prompt': prompt,
-                                'completion': completion
-                            }
-                            formatted_data.append(entry)
-                            self.processed_hashes.add(content_hash)
-                            
-            except Exception as e:
-                self.logger.error(f"Error processing batch: {str(e)}")
-                continue
+                url = data.get('url', '')
+                title = data.get('title', '')
+                content = data.get('content', [])
                 
-        return formatted_data, source_metadata
+                if not content:
+                    continue
+                    
+                # Add source to metadata if not already added
+                if url and url not in source_metadata["sources"]["original"]:
+                    source_metadata["sources"]["original"].append(url)
+                    friendly_name = self.source_tracker.format_source_path(url)
+                    # Remove domain prefix for friendly names
+                    if friendly_name.startswith(('sfbu.edu/', 'www.sfbu.edu/')):
+                        friendly_name = friendly_name.split('/', 1)[1]
+                    source_metadata["sources"]["friendly"].append(friendly_name)
+                
+                # Format content into Q&A pairs
+                for item in content:
+                    if isinstance(item, dict) and item.get('text'):
+                        context = f"{title} - {item.get('section', 'main')}" if title else item.get('section', 'main')
+                        text = item['text']
+                        
+                        # Generate Q&A pairs for this content
+                        qa_pairs = self._generate_qa_pairs(text, context)
+                        formatted_data.extend(qa_pairs)
+            
+            # Update metadata counts
+            total_examples = len(formatted_data)
+            train_size = int(total_examples * 0.8)  # 80% for training
+            
+            # Add counts to metadata
+            source_metadata.update({
+                "total_examples": total_examples,
+                "train_examples": train_size,
+                "val_examples": total_examples - train_size
+            })
+            
+            return formatted_data, source_metadata
+            
+        except Exception as e:
+            self.logger.error(f"Error formatting data: {str(e)}")
+            raise
 
     def _get_friendly_source_name(self, source_path: str) -> str:
         """Convert source path to user-friendly name"""
@@ -179,16 +206,8 @@ class JSONLFormatter:
         self._save_jsonl_file(val_data, val_file)
         
         # Enhanced metadata
-        metadata = {
-            'timestamp': timestamp,
-            'total_examples': len(formatted_data),
-            'train_examples': len(train_data),
-            'val_examples': len(val_data),
-            'sources': {
-                'original': list(source_metadata.keys()),
-                'friendly': list(source_metadata.values())
-            }
-        }
+        metadata = source_metadata
+        
         
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -241,3 +260,67 @@ class JSONLFormatter:
         # Implement preview update mechanism
         # This will be called by the Gradio interface
         pass
+
+    def _generate_qa_pairs(self, text: str, context: str = "") -> List[Dict[str, str]]:
+        """Generate Q&A pairs from text using OpenAI API"""
+        try:
+            # Clean the input text
+            text = self._clean_qa_text(text)
+            if len(text) < 50:  # Skip very short texts
+                return []
+
+            # Prepare the prompt
+            system_prompt = """
+            Generate 2-3 contextually relevant question-answer pairs from the given text.
+            Requirements:
+            - Focus on important information useful for students or staff
+            - Questions should be clear and direct
+            - Answers should be complete sentences
+            - Avoid redundant or trivial questions
+            - Each pair should be on a new line in format: Q: [question] | A: [answer]
+            """
+
+            # Remove potentially conflicting parameters from MODEL_PARAMS
+            model_params = MODEL_PARAMS['formatter'].copy()
+            params_to_remove = ['temperature', 'max_tokens']  # Add any other potentially conflicting params
+            for param in params_to_remove:
+                model_params.pop(param, None)
+            
+            # Make API call with clean parameters
+            response = self.client.chat.completions.create(
+                model=OPENAI_MODELS['formatter'],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Context: {context}\nText: {text}"}
+                ],
+                temperature=0.7,
+                max_tokens=1000,
+                **model_params
+            )
+
+            # Parse response
+            qa_text = response.choices[0].message.content
+            qa_pairs = []
+
+            # Process each line
+            for line in qa_text.strip().split('\n'):
+                if '|' in line:
+                    q_part, a_part = line.split('|')
+                    question = q_part.replace('Q:', '').strip()
+                    answer = a_part.replace('A:', '').strip()
+                    
+                    # Generate hash for deduplication
+                    content_hash = self._generate_hash(question + answer)
+                    
+                    if content_hash not in self.processed_hashes:
+                        self.processed_hashes.add(content_hash)
+                        qa_pairs.append({
+                            "prompt": question,
+                            "completion": answer
+                        })
+
+            return qa_pairs
+
+        except Exception as e:
+            self.logger.error(f"Error generating Q&A pairs: {str(e)}")
+            return []

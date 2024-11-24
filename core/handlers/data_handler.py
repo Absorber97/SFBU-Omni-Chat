@@ -5,7 +5,7 @@ class DataHandler:
     def __init__(self, app):
         self.app = app
     
-    def process_pdf(self, pdf_path) -> Tuple[Dict, List, List]:
+    def process_pdf(self, pdf_path) -> Tuple[Dict, List[List[str]], List[List[str]]]:
         """Process PDF with logging"""
         try:
             self.app.logger.info(f"Starting PDF processing: {pdf_path}")
@@ -25,17 +25,18 @@ class DataHandler:
             
             preview_data = self.app._load_preview_data(files['train_file'], files['val_file'])
             
+            # Format preview data for Gradio Dataframe
+            train_preview = self._format_preview_data(preview_data['train_preview'])
+            val_preview = self._format_preview_data(preview_data['val_preview'])
+            
             return (
                 {
                     'status': 'success',
                     'message': f"Processed {len(formatted_data)} entries",
-                    'output_dir': self.app.jsonl_formatter.current_output_dir,
-                    'train_file': files['train_file'],
-                    'val_file': files['val_file'],
-                    'metadata_file': files['metadata_file']
+                    'files': files
                 },
-                preview_data['train_preview'],
-                preview_data['val_preview']
+                train_preview,
+                val_preview
             )
             
         except Exception as e:
@@ -46,17 +47,31 @@ class DataHandler:
                 []
             )
 
-    def process_url(self, url) -> Tuple[Dict, List, List]:
-        """Process URL with logging"""
+    def _format_preview_data(self, data: List[Dict]) -> List[List[str]]:
+        """Format data for Gradio Dataframe display"""
+        formatted_data = []
+        for item in data:
+            # Convert each dictionary item to a list format
+            formatted_data.append([
+                item.get('prompt', ''),  # Question
+                item.get('completion', '')  # Answer
+            ])
+        return formatted_data
+
+    def process_url(self, url: str, enable_recursion: bool = False, max_urls: int = 2) -> Tuple[Dict, List[List[str]], List[List[str]]]:
+        """Process URL and return formatted data"""
         try:
-            self.app.logger.info(f"Starting URL processing: {url}")
-            extracted_data = self.app.url_extractor.extract_text(url)
-            self.app.logger.info(f"Extracted {len(extracted_data)} sections from URL")
+            # Extract text from URL
+            self.app.logger.info(f"Starting URL processing: {url} (recursion: {'enabled' if enable_recursion else 'disabled'})")
+            extracted_data = self.app.url_extractor.extract_text(url, enable_recursion, max_urls)
             
+            # Format data using JSONLFormatter
             formatted_data, source_metadata = self.app.jsonl_formatter.format_data(extracted_data)
-            dataset_name = f"url_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
+            # Save the formatted data
+            dataset_name = f"url_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             files = self.app.jsonl_formatter.save_jsonl(formatted_data, dataset_name, source_metadata)
+            
             if not files:
                 return (
                     {"status": "error", "message": "No data to process"},
@@ -64,20 +79,23 @@ class DataHandler:
                     []
                 )
             
+            # Load preview data
             preview_data = self.app._load_preview_data(files['train_file'], files['val_file'])
+            
+            # Format preview data for Gradio Dataframe
+            train_preview = self._format_preview_data(preview_data['train_preview'])
+            val_preview = self._format_preview_data(preview_data['val_preview'])
             
             return (
                 {
                     'status': 'success',
                     'message': f"Processed {len(formatted_data)} entries",
-                    'output_dir': self.app.jsonl_formatter.current_output_dir,
-                    'train_file': files['train_file'],
-                    'val_file': files['val_file'],
-                    'metadata_file': files['metadata_file']
+                    'files': files
                 },
-                preview_data['train_preview'],
-                preview_data['val_preview']
+                train_preview,
+                val_preview
             )
+            
         except Exception as e:
             self.app.logger.error(f"Error processing URL: {str(e)}")
             return (
