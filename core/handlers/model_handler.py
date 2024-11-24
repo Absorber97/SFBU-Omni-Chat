@@ -104,4 +104,14 @@ class ModelHandler:
             return {
                 'status': 'error',
                 'message': str(e)
-            } 
+            }
+
+    def get_available_base_models(self) -> List[str]:
+        """Get list of available base models for fine-tuning"""
+        try:
+            self.app.logger.info("Fetching available models for fine-tuning")
+            return self.app.trainer.get_available_models()
+        except Exception as e:
+            self.app.logger.error(f"Error fetching models: {str(e)}")
+            return []
+ 

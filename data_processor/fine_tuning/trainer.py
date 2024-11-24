@@ -2,9 +2,15 @@ import openai
 from openai import OpenAI
 from typing import Dict, Any, List, Optional, Tuple
 import os
-from config import OPENAI_MODELS, MODEL_PARAMS, get_fine_tuned_model_name
-from utils.batch_processor import BatchProcessor
+import logging
 from dataclasses import dataclass
+from config import (
+    OPENAI_MODELS, 
+    MODEL_PARAMS, 
+    MODEL_CONFIG, 
+    get_fine_tuned_model_name
+)
+from utils.batch_processor import BatchProcessor
 
 @dataclass
 class TrainingFiles:
@@ -17,6 +23,7 @@ class TrainingFiles:
 class ModelTrainer:
     def __init__(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
+        self.logger = logging.getLogger(__name__)
         self.batch_processor = BatchProcessor[str, Dict[str, Any]](
             batch_size=10,
             max_workers=3
@@ -121,4 +128,47 @@ class ModelTrainer:
             return {
                 'status': 'error',
                 'error': str(e)
-            } 
+            }
+
+    def get_available_models(self) -> List[str]:
+        """Fetch available models for fine-tuning from OpenAI"""
+        try:
+            models = self.client.models.list()
+            
+            # Get our fine-tuning suffix from config
+            suffix = MODEL_CONFIG['fine_tuned_suffix']
+            base_name = MODEL_CONFIG['base_name']
+            
+            # Filter for models that are either:
+            # 1. Base GPT-4 models
+            # 2. Previously fine-tuned models with our suffix
+            available_models = []
+            for model in models:
+                model_id = model.id
+                # Include GPT-4 base models
+                if model_id.startswith(base_name):
+                    available_models.append(model_id)
+                # Include our fine-tuned models
+                elif suffix in model_id:
+                    available_models.append(model_id)
+            
+            # Sort models: GPT-4 models first, then fine-tuned models
+            def sort_key(model_name: str) -> tuple:
+                """Sort key function to order models"""
+                is_gpt4 = 1 if model_name.startswith(base_name) else 2
+                is_fine_tuned = 1 if suffix in model_name else 2
+                return (is_gpt4, is_fine_tuned, model_name)
+            
+            sorted_models = sorted(available_models, key=sort_key)
+            
+            if not sorted_models:
+                self.logger.warning("No GPT-4 or fine-tuned models found")
+                # Fallback to default model from config
+                return [base_name]
+            
+            return sorted_models
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching available models: {str(e)}")
+            # Return default model on error
+            return [MODEL_CONFIG['base_name']] 

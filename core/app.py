@@ -3,13 +3,24 @@ from data_processor.extractors.url_extractor import URLExtractor
 from data_processor.formatters.jsonl_formatter import JSONLFormatter
 from data_processor.source_tracker import SourceTracker
 from utils.logger import Logger
+from data_processor.fine_tuning.trainer import ModelTrainer
+from config import OPENAI_API_KEY
 import os
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 class SFBUApp:
     def __init__(self):
-        self.logger = Logger()
+        """Initialize the SFBU App with required components"""
+        self.logger = Logger()  # Use Logger class directly
+        
+        # Initialize trainer with API key
+        if not OPENAI_API_KEY:
+            raise ValueError("OpenAI API key is required")
+        self.trainer = ModelTrainer(api_key=OPENAI_API_KEY)
+        
+        # Initialize other components
+        self.chat_manager = None  # Will be initialized when needed
         self.source_tracker = SourceTracker()
         self.jsonl_formatter = JSONLFormatter(
             source_tracker=self.source_tracker

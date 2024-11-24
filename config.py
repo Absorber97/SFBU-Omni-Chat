@@ -39,9 +39,9 @@ DEFAULT_MODEL = MODEL_CONFIG['base_name']
 
 # Centralized model configuration
 OPENAI_MODELS: ModelConfig = {
-    ModelType.FORMATTER.value: DEFAULT_MODEL,  # For generating Q&A pairs
-    ModelType.TRAINER.value: DEFAULT_MODEL,    # For fine-tuning base model
-    ModelType.CHAT.value: DEFAULT_MODEL,       # For chat interface
+    ModelType.FORMATTER.value: MODEL_CONFIG['base_name'],  # Keep gpt-4o-mini
+    ModelType.TRAINER.value: None,  # Will be set dynamically from available models
+    ModelType.CHAT.value: MODEL_CONFIG['base_name'],  # Keep gpt-4o-mini
 }
 
 # API Configuration
