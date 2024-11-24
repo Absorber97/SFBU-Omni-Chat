@@ -12,12 +12,21 @@ def create_data_processing_tab(
             with gr.Column():
                 pdf_input = gr.File(label="📒 Upload PDF")
                 process_pdf_btn = gr.Button("📥 Process PDF")
-                url_input = gr.Textbox(label="🔗 Enter URL")
+                url_input = gr.Textbox(
+                    label="🔗 Enter URL(s)",
+                    placeholder="Enter single URL or multiple URLs (one per line)",
+                    lines=3
+                )
                 with gr.Row():
                     enable_recursion = gr.Checkbox(
                         label="Enable Link Recursion",
                         value=False,
                         info="Extract data from linked pages within the same domain"
+                    )
+                    enable_batch = gr.Checkbox(
+                        label="Enable Batch Processing",
+                        value=False,
+                        info="Process multiple URLs (one per line)"
                     )
                     max_urls = gr.Slider(
                         minimum=1,
@@ -28,7 +37,7 @@ def create_data_processing_tab(
                         visible=False,
                         info="Maximum number of URLs to process when recursion is enabled"
                     )
-                process_url_btn = gr.Button("🌐 Process URL")
+                process_url_btn = gr.Button("🌐 Process URL(s)")
         
         with gr.Row():
             with gr.Column():
@@ -72,7 +81,7 @@ def create_data_processing_tab(
 
         process_url_btn.click(
             fn=data_handler.process_url,
-            inputs=[url_input, enable_recursion, max_urls],
+            inputs=[url_input, enable_recursion, enable_batch, max_urls],
             outputs=[process_output, train_preview, val_preview]
         ).then(
             fn=update_logs,
@@ -87,6 +96,13 @@ def create_data_processing_tab(
             fn=lambda x: gr.update(visible=x),
             inputs=[enable_recursion],
             outputs=[max_urls]
+        )
+
+        # Update URL input appearance based on batch processing
+        enable_batch.change(
+            fn=lambda x: gr.update(lines=5 if x else 3),
+            inputs=[enable_batch],
+            outputs=[url_input]
         )
 
     return tab 

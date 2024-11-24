@@ -1,5 +1,6 @@
 from typing import Dict, List, Tuple
 from datetime import datetime
+from urllib.parse import urlparse
 
 class DataHandler:
     def __init__(self, app):
@@ -75,15 +76,45 @@ class DataHandler:
                 ])
         return formatted_data
 
-    def process_url(self, url: str, enable_recursion: bool = False, max_urls: int = 2) -> Tuple[Dict, List[List[str]], List[List[str]]]:
-        """Process URL and return formatted data"""
+    def process_url(
+        self, 
+        urls: str, 
+        enable_recursion: bool = False, 
+        enable_batch: bool = False,
+        max_urls: int = 2
+    ) -> Tuple[Dict, List[List[str]], List[List[str]]]:
+        """Process URL(s) and return formatted data"""
         try:
-            # Extract text from URL
-            self.app.logger.info(f"Starting URL processing: {url} (recursion: {'enabled' if enable_recursion else 'disabled'})")
-            extracted_data = self.app.url_extractor.extract_text(url, enable_recursion, max_urls)
-            
-            # Format data using JSONLFormatter
-            formatted_data, source_metadata = self.app.jsonl_formatter.format_data(extracted_data)
+            # Parse URLs based on batch mode
+            url_list = self._parse_urls(urls, enable_batch)
+            if not url_list:
+                return (
+                    {"status": "error", "message": "No valid URLs provided"},
+                    [],
+                    []
+                )
+
+            # Process each URL and collect results
+            all_extracted_data = []
+            for url in url_list:
+                self.app.logger.info(f"Processing URL: {url}")
+                extracted_data = self.app.url_extractor.extract_text(
+                    url, 
+                    enable_recursion, 
+                    max_urls
+                )
+                if extracted_data:
+                    all_extracted_data.extend(extracted_data)
+
+            if not all_extracted_data:
+                return (
+                    {"status": "error", "message": "No data could be extracted from the URL(s)"},
+                    [],
+                    []
+                )
+
+            # Format all collected data
+            formatted_data, source_metadata = self.app.jsonl_formatter.format_data(all_extracted_data)
             
             # Save the formatted data
             dataset_name = f"url_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -106,17 +137,43 @@ class DataHandler:
             return (
                 {
                     'status': 'success',
-                    'message': f"Processed {len(formatted_data)} entries",
+                    'message': f"Processed {len(url_list)} URL(s), generated {len(formatted_data)} entries",
                     'files': files
                 },
                 train_preview,
                 val_preview
             )
-            
         except Exception as e:
-            self.app.logger.error(f"Error processing URL: {str(e)}")
+            self.app.logger.error(f"Error processing URLs: {str(e)}")
             return (
-                {'status': 'error', 'message': str(e)},
+                {"status": "error", "message": f"Error processing URLs: {str(e)}"},
                 [],
                 []
             )
+
+    def _parse_urls(self, urls: str, enable_batch: bool) -> List[str]:
+        """Parse and validate URLs from input"""
+        if not urls.strip():
+            return []
+        
+        # Split URLs if batch mode is enabled
+        url_list = urls.strip().split('\n') if enable_batch else [urls.strip()]
+        
+        # Clean and validate URLs
+        valid_urls = []
+        for url in url_list:
+            url = url.strip()
+            if url and self._is_valid_url(url):
+                valid_urls.append(url)
+            else:
+                self.app.logger.warning(f"Invalid URL skipped: {url}")
+        
+        return valid_urls
+
+    def _is_valid_url(self, url: str) -> bool:
+        """Validate URL format"""
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except Exception:
+            return False
