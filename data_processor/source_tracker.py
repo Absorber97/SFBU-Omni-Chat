@@ -148,27 +148,23 @@ class SourceTracker:
                             dataset_name = train_file.replace('_train.jsonl', '')
                             metadata_file = f"{dataset_name}_metadata.json"
                             metadata_path = os.path.join(dir_path, metadata_file)
+                            full_train_path = os.path.join(dir_path, train_file)
                             
                             if os.path.exists(metadata_path):
                                 with open(metadata_path, 'r') as f:
                                     metadata = json.load(f)
                                 
                                 # Check if this dataset has been fine-tuned
-                                fine_tuned_sources = self.get_fine_tuned_sources()
-                                fine_tuning_status = next(
-                                    (source for source in fine_tuned_sources 
-                                     if source['file_path'] == os.path.join(dir_path, train_file)),
-                                    None
-                                )
+                                fine_tuning_info = self.sources.get(full_train_path, {})
                                 
                                 datasets.append({
                                     'name': dataset_name,
-                                    'path': os.path.join(dir_path, train_file),
+                                    'path': full_train_path,
                                     'timestamp': timestamp_dir,
                                     'sources': metadata['sources'].get('friendly', []),
-                                    'fine_tuned': bool(fine_tuning_status),
-                                    'status': fine_tuning_status['status'] if fine_tuning_status else None,
-                                    'job_id': fine_tuning_status['job_id'] if fine_tuning_status else None,
+                                    'fine_tuned': bool(fine_tuning_info),
+                                    'fine_tuning_status': fine_tuning_info.get('fine_tuning_status', 'unknown'),
+                                    'job_id': fine_tuning_info.get('job_id'),
                                     'metadata': metadata  # Include full metadata
                                 })
                                 

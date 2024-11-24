@@ -28,12 +28,12 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         """Get user-friendly status for dataset"""
         if dataset.get('fine_tuned'):
             status = dataset.get('fine_tuning_status', '').lower()
-            if status == 'succeeded':
+            if status in ['succeeded', 'success']:
                 return '✅ Fine-tuning Complete'
-            elif status == 'failed':
+            elif status in ['failed', 'error', 'cancelled', 'stopping', 'failure']:
                 return '❌ Fine-tuning Failed'
-            elif status == 'started':
-                return '🔄 Fine-tuning in Progress'
+            elif status in ['started', 'running', 'validating_files', 'queued']:
+                return f'🔄 {status}'
             else:
                 return '❓ Unknown Status'
         return '🟢 Available for Fine-tuning'
@@ -82,38 +82,63 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
         """Get list of available base models for fine-tuning"""
         return model_handler.get_available_base_models()
     
-    def refresh_datasets() -> Tuple[pd.DataFrame, List[Tuple[str, str]], List[str]]:
+    def refresh_datasets() -> Tuple[pd.DataFrame, Dict, Dict]:
         """Refresh the datasets list and dropdown options"""
         datasets = model_handler.source_tracker.get_training_datasets()
-        base_models = get_available_base_models()  # Get actual available models
+        base_models = model_handler.get_available_base_models()
         
-        if not base_models:
-            base_models = ["No models available for fine-tuning"]
-        
+        # Format dataset choices for dropdown - only show name, not full path
         available_datasets = [
-            (d['name'], d['path']) 
-            for d in datasets 
-            if not d['fine_tuned']
+            d['name'] for d in datasets 
+            if not d.get('fine_tuned', False)
         ]
         
+        if not available_datasets:
+            available_datasets = ["No datasets available"]
+        
+        if not base_models:
+            base_models = ["No models available"]
+            
         return (
             format_dataset_info(datasets),
-            available_datasets,
-            base_models
+            {
+                "choices": available_datasets,
+                "value": available_datasets[0] if available_datasets else None
+            },
+            {
+                "choices": base_models,
+                "value": base_models[0] if base_models else None
+            }
         )
     
-    def start_fine_tuning(dataset_path: str, base_model: str) -> Dict[str, Any]:
-        """Start fine-tuning with selected dataset and base model"""
-        if not dataset_path:
-            return {"error": "Please select a dataset"}
-        if not base_model:
-            return {"error": "Please select a base model"}
+    def start_fine_tuning(dataset_name: str, base_model: str) -> Dict:
+        """Start fine-tuning process"""
+        if not dataset_name or dataset_name == "No datasets available":
+            return {'status': 'error', 'message': 'Please select a valid dataset'}
             
-        return model_handler.start_fine_tuning(dataset_path, base_model)
+        if not base_model or base_model == "No models available":
+            return {'status': 'error', 'message': 'Please select a valid base model'}
+            
+        # Find the full path for the selected dataset name
+        datasets = model_handler.source_tracker.get_training_datasets()
+        dataset = next((d for d in datasets if d['name'] == dataset_name), None)
+        
+        if not dataset:
+            return {'status': 'error', 'message': 'Dataset not found'}
+            
+        return model_handler.start_fine_tuning(dataset['path'], base_model)
     
-    # Get initial data
-    initial_table_data, initial_dataset_choices, initial_model_choices = refresh_datasets()
+    # Initial data
+    initial_datasets = model_handler.source_tracker.get_training_datasets()
+    initial_table_data = format_dataset_info(initial_datasets)
     
+    # Initial dropdown choices
+    initial_dataset_choices = [
+        d['name'] for d in initial_datasets         
+    ] or ["No datasets available"]
+    
+    initial_model_choices = model_handler.get_available_base_models() or ["No models available"]
+
     with gr.Tab("🔧 Fine-tuning") as tab:
         # Available Datasets Section
         gr.Markdown("### 📚 Available Datasets")
@@ -133,17 +158,16 @@ def create_fine_tuning_tab(model_handler: Any) -> gr.Tab:
                 dataset_dropdown = gr.Dropdown(
                     label="Select Dataset for Fine-tuning",
                     choices=initial_dataset_choices,
+                    value=initial_dataset_choices[0] if initial_dataset_choices else None,
                     interactive=True,
-                    info="Choose a dataset to fine-tune the model",
-                    allow_custom_value=False
+                    info="Choose a dataset to fine-tune the model"
                 )
                 base_model_dropdown = gr.Dropdown(
                     label="Select Base Model",
                     choices=initial_model_choices,
                     value=initial_model_choices[0] if initial_model_choices else None,
                     interactive=True,
-                    info="Choose an OpenAI model available for fine-tuning",
-                    allow_custom_value=False
+                    info="Choose an OpenAI model available for fine-tuning"
                 )
             
             with gr.Row():

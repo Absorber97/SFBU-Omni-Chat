@@ -8,6 +8,7 @@ from config import (
     OPENAI_MODELS, 
     MODEL_PARAMS, 
     MODEL_CONFIG, 
+    get_fine_tuned_model_name
 )
 from utils.batch_processor import BatchProcessor
 
@@ -148,7 +149,7 @@ class ModelTrainer:
                 if model_id.startswith(base_name):
                     available_models.append(model_id)
                 # Include our fine-tuned models - check if suffix is anywhere in the model ID
-                elif suffix.lower() in model_id.lower():
+                elif suffix.lower() in model_id.lower() and not (model_id.endswith('step-15') or model_id.endswith('step-30')):
                     available_models.append(model_id)
                     self.logger.info(f"Found fine-tuned model: {model_id}")
             
