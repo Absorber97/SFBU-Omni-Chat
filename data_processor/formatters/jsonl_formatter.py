@@ -46,32 +46,36 @@ class JSONLFormatter:
     def _generate_qa_pairs_batch(self, batch: List[Dict[str, str]]) -> List[List[Tuple[str, str]]]:
         """Generate Q&A pairs for a batch of items"""
         try:
-            # Prepare batch messages
-            qa_pairs_list = []
+            messages = []
             for item in batch:
-                response = self.client.chat.completions.create(
-                    model=OPENAI_MODELS['formatter'],
-                    messages=[
-                        {"role": "system", "content": """
-                        Generate 2-3 contextually relevant question-answer pairs from the given text.
-                        Requirements:
-                        - Focus on important information useful for students or staff
-                        - Questions should be clear and direct (no "Q:" prefix)
-                        - Answers should be complete sentences (no "A:" prefix)
-                        - Avoid redundant or trivial questions
-                        - Make questions natural and conversational
-                        
-                        Format: Return only the Q&A pairs, one per line, separated by ||| between question and answer.
-                        Example:
-                        What are the housing options available at SFBU? ||| SFBU offers non-traditional campus housing for both undergraduate and graduate students.
-                        How do I contact the Residential Life staff? ||| You can reach the Residential Life staff through email at residentiallife@sfbu.edu.
-                        """},
-                        {"role": "user", "content": f"Section: {item['section']}\n\nContent: {item['content']}"}
-                    ],
-                    **MODEL_PARAMS['formatter']
-                )
-                
-                qa_text = response.choices[0].message.content
+                messages.append([
+                    {"role": "system", "content": """
+                    Generate 2-3 contextually relevant question-answer pairs from the given text.
+                    Requirements:
+                    - Focus on important information useful for students or staff
+                    - Questions should be clear and direct (no "Q:" prefix)
+                    - Answers should be complete sentences (no "A:" prefix)
+                    - Avoid redundant or trivial questions
+                    - Make questions natural and conversational
+                    
+                    Format: Return only the Q&A pairs, one per line, separated by ||| between question and answer.
+                    Example:
+                    What are the housing options available at SFBU? ||| SFBU offers non-traditional campus housing for both undergraduate and graduate students.
+                    How do I contact the Residential Life staff? ||| You can reach the Residential Life staff through email at residentiallife@sfbu.edu.
+                    """},
+                    {"role": "user", "content": f"Section: {item['section']}\n\nContent: {item['content']}"}
+                ])
+            
+            # Create batch request
+            responses = self.client.chat.completions.create(
+                model=OPENAI_MODELS['formatter'],
+                messages=messages,
+                **MODEL_PARAMS['formatter']
+            )
+            
+            qa_pairs_list = []
+            for response in responses.choices:
+                qa_text = response.message.content
                 qa_pairs = []
                 
                 for line in qa_text.strip().split('\n'):
