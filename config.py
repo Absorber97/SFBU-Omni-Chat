@@ -21,13 +21,21 @@ class ModelType(Enum):
     TRAINER = 'trainer'
     CHAT = 'chat'
 
-# API Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-if not OPENAI_API_KEY:
-    raise ValueError("OpenAI API key not found in environment variables")
+# Model naming configuration
+MODEL_CONFIG = {
+    'base_name': 'gpt-4o-mini',
+    'fine_tuned_suffix': 'omni-sfbu',
+    'separator': '-'  # Separator between base name and suffix
+}
+
+# Helper function to get full model name
+def get_fine_tuned_model_name(base_name: str = None) -> str:
+    """Generate full model name with suffix"""
+    base = base_name or MODEL_CONFIG['base_name']
+    return f"{base}{MODEL_CONFIG['separator']}{MODEL_CONFIG['fine_tuned_suffix']}"
 
 # Default model for all services
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MODEL = MODEL_CONFIG['base_name']
 
 # Centralized model configuration
 OPENAI_MODELS: ModelConfig = {
@@ -35,6 +43,11 @@ OPENAI_MODELS: ModelConfig = {
     ModelType.TRAINER.value: DEFAULT_MODEL,    # For fine-tuning base model
     ModelType.CHAT.value: DEFAULT_MODEL,       # For chat interface
 }
+
+# API Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    raise ValueError("OpenAI API key not found in environment variables")
 
 # Model parameters with type safety
 MODEL_PARAMS: Dict[str, ModelParams] = {
@@ -45,6 +58,9 @@ MODEL_PARAMS: Dict[str, ModelParams] = {
     ModelType.TRAINER.value: {
         'temperature': 0.7,
         'max_tokens': 2000,
+        'n_epochs': 3,  # Number of training epochs
+        'batch_size': 4,  # Training batch size
+        'learning_rate_multiplier': 0.1  # Learning rate control
     },
     ModelType.CHAT.value: {
         'temperature': 0.8,

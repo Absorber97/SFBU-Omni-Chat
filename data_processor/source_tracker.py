@@ -125,3 +125,17 @@ class SourceTracker:
         except Exception as e:
             logging.error(f"Error getting training datasets: {str(e)}")
             return []
+    
+    def get_dataset_metadata(self, dataset_path: str) -> Dict[str, Any]:
+        """Get metadata for a specific dataset"""
+        try:
+            # Convert training file path to metadata file path
+            metadata_path = dataset_path.replace('_train.jsonl', '_metadata.json')
+            
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            self.logger.error(f"Error reading metadata: {str(e)}")
+            return {}

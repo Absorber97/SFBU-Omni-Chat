@@ -8,7 +8,7 @@ class ModelHandler:
         self.app = app
         self.source_tracker = SourceTracker()
     
-    def start_fine_tuning(self, file_path: str) -> Dict:
+    def start_fine_tuning(self, file_path: str, base_model: str = None) -> Dict:
         """Start fine-tuning process"""
         try:
             if not file_path:
@@ -18,7 +18,7 @@ class ModelHandler:
                 }
                 
             self.app.logger.info(f"Starting fine-tuning with file: {file_path}")
-            result = self.app.trainer.start_fine_tuning(file_path)
+            result = self.app.trainer.start_fine_tuning(file_path, base_model)
             
             if result['status'] == 'error':
                 self.app.logger.error(f"Fine-tuning error: {result['error']}")
@@ -32,6 +32,7 @@ class ModelHandler:
                 'file_path': file_path,
                 'job_id': result['job_id'],
                 'status': 'started',
+                'base_model': base_model,
                 'timestamp': datetime.now().isoformat()
             })
             
