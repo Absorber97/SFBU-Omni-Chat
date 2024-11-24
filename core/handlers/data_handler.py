@@ -1,19 +1,69 @@
 from typing import Dict, List, Tuple
 from datetime import datetime
 from urllib.parse import urlparse
+import os
 
 class DataHandler:
     def __init__(self, app):
         self.app = app
     
-    def process_pdf(self, pdf_path) -> Tuple[Dict, List[List[str]], List[List[str]]]:
-        """Process PDF with logging"""
+    def process_pdf(
+        self, 
+        pdf_paths,
+        enable_batch: bool = False
+    ) -> Tuple[Dict, List[List[str]], List[List[str]]]:
+        """Process single or multiple PDFs with logging"""
         try:
-            self.app.logger.info(f"Starting PDF processing: {pdf_path}")
-            extracted_data = self.app.pdf_extractor.extract_text(pdf_path)
-            self.app.logger.info(f"Extracted {len(extracted_data)} chunks from PDF")
+            # Handle both single and multiple PDF uploads
+            if not isinstance(pdf_paths, list):
+                pdf_paths = [pdf_paths]
             
-            formatted_data, source_metadata = self.app.jsonl_formatter.format_data(extracted_data)
+            if not pdf_paths:
+                return (
+                    {"status": "error", "message": "No PDF files provided"},
+                    [],
+                    []
+                )
+            
+            # If batch processing is disabled and multiple files are uploaded
+            if not enable_batch and len(pdf_paths) > 1:
+                return (
+                    {"status": "error", "message": "Batch processing is disabled. Please enable it to process multiple PDFs."},
+                    [],
+                    []
+                )
+
+            # Process each PDF and collect results
+            all_extracted_data = []
+            processed_files = []
+            failed_files = []
+
+            for pdf_path in pdf_paths:
+                try:
+                    self.app.logger.info(f"Starting PDF processing: {pdf_path}")
+                    extracted_data = self.app.pdf_extractor.extract_text(pdf_path)
+                    
+                    if extracted_data:
+                        all_extracted_data.extend(extracted_data)
+                        processed_files.append(os.path.basename(pdf_path))
+                        self.app.logger.info(f"Successfully processed: {pdf_path}")
+                    else:
+                        failed_files.append(os.path.basename(pdf_path))
+                        self.app.logger.warning(f"No data extracted from: {pdf_path}")
+                    
+                except Exception as e:
+                    failed_files.append(os.path.basename(pdf_path))
+                    self.app.logger.error(f"Error processing PDF {pdf_path}: {str(e)}")
+
+            if not all_extracted_data:
+                return (
+                    {"status": "error", "message": "No data could be extracted from any PDF"},
+                    [],
+                    []
+                )
+
+            # Format all collected data
+            formatted_data, source_metadata = self.app.jsonl_formatter.format_data(all_extracted_data)
             dataset_name = f"pdf_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
             files = self.app.jsonl_formatter.save_jsonl(formatted_data, dataset_name, source_metadata)
@@ -30,18 +80,25 @@ class DataHandler:
             train_preview = self._format_preview_data(preview_data['train_preview'])
             val_preview = self._format_preview_data(preview_data['val_preview'])
             
+            # Prepare status message
+            status_msg = f"Processed {len(processed_files)} PDF(s), generated {len(formatted_data)} entries"
+            if failed_files:
+                status_msg += f"\nFailed to process: {', '.join(failed_files)}"
+            
             return (
                 {
                     'status': 'success',
-                    'message': f"Processed {len(formatted_data)} entries",
-                    'files': files
+                    'message': status_msg,
+                    'files': files,
+                    'processed_files': processed_files,
+                    'failed_files': failed_files
                 },
                 train_preview,
                 val_preview
             )
             
         except Exception as e:
-            self.app.logger.error(f"Error processing PDF: {str(e)}")
+            self.app.logger.error(f"Error in PDF processing: {str(e)}")
             return (
                 {'status': 'error', 'message': str(e)},
                 [],

@@ -10,8 +10,18 @@ def create_data_processing_tab(
     with gr.Tab("🔄 Data Processing") as tab:
         with gr.Row():
             with gr.Column():
-                pdf_input = gr.File(label="📒 Upload PDF")
-                process_pdf_btn = gr.Button("📥 Process PDF")
+                with gr.Row():
+                    pdf_input = gr.File(
+                        label="📒 Upload PDF(s)",
+                        file_count="multiple",  # Allow multiple files
+                        file_types=[".pdf"]
+                    )
+                    enable_batch_pdf = gr.Checkbox(
+                        label="Enable Batch PDF Processing",
+                        value=False,
+                        info="Process multiple PDFs at once"
+                    )
+                process_pdf_btn = gr.Button("📥 Process PDF(s)")
                 url_input = gr.Textbox(
                     label="🔗 Enter URL(s)",
                     placeholder="Enter single URL or multiple URLs (one per line)",
@@ -69,7 +79,7 @@ def create_data_processing_tab(
 
         process_pdf_btn.click(
             fn=data_handler.process_pdf,
-            inputs=[pdf_input],
+            inputs=[pdf_input, enable_batch_pdf],
             outputs=[process_output, train_preview, val_preview]
         ).then(
             fn=update_logs,
