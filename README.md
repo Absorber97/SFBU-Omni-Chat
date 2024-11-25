@@ -1,162 +1,159 @@
-# SFBU Omni Assistant
+# SFBU Omni Chat 🤖
 
-An AI-powered chatbot application for San Francisco Bay University that processes institutional documents, fine-tunes OpenAI models, and provides intelligent responses about university information.
-
-## 🌟 Features
-
-### 📚 Document Processing
-- PDF document processing with smart text extraction
-- URL content extraction with context preservation
-- Automatic text chunking and formatting
-- Intelligent Q&A pair generation using OpenAI
-- Duplicate content detection
-- Real-time processing logs
-
-### 🤖 AI Model Fine-tuning
-- OpenAI GPT model fine-tuning
-- Training progress tracking
-- Model version management
-- Source tracking with metadata
-- Fine-tuning status monitoring
-
-### 💬 Interactive Chat Interface
-- Real-time AI responses
-- Conversation history management
-- Multiple fine-tuned model support
-- Context-aware responses
-- User-friendly interface
-
-## 🚀 Prerequisites
-
-- Python 3.8+
-- OpenAI API key
-- spaCy model: `en_core_web_sm`
-- Internet connection for URL processing
-- Sufficient disk space for training data
-
-## 📦 Installation
-
-1. Clone the repository:
-```bash
-git clone [repo-url]
-cd sfbu-omni-chat
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
-```
-
-4. Set up environment variables:
-   - Create a `.env` file in the project root
-   - Add your OpenAI API key:
-```bash
-OPENAI_API_KEY=your_openai_api_key
-```
-
-5. Create required directories:
-```bash
-mkdir -p assets/images logs training_data
-```
-
-6. Add SFBU assets:
-   - Place `SFBU.jpeg` in `assets/images/`
-
-## 🎮 Usage
-
-1. Start the application:
-```bash
-python app.py
-```
-
-2. Access the web interface at `http://localhost:7860`
-
-3. Use the different tabs:
-   - **Data Processing**: Upload PDFs or enter URLs
-     - View real-time processing logs
-     - See training data previews
-     - Track processed sources
-   
-   - **Fine-tuning**: Train custom models
-     - Select training files
-     - Monitor training progress
-     - View available models
-   
-   - **Chat**: Interact with the AI
-     - Select models
-     - View chat history
-     - Get real-time responses
+An intelligent chatbot system for San Francisco Bay University, powered by OpenAI's GPT models with RAG (Retrieval Augmented Generation) capabilities. Features advanced data processing for PDFs and web content, along with model fine-tuning capabilities to enhance domain-specific knowledge.
 
 ## 📁 Project Structure
 
 ```
 sfbu-omni-chat/
-├── app.py                 # Main entry point
-├── core/                  # Core application logic
-│   ├── app.py            # Main application class
-│   └── handlers/         # Request handlers
-├── data_processor/       # Data processing modules
-│   ├── extractors/       # PDF and URL processors
-│   ├── formatters/       # Data formatting
-│   ├── fine_tuning/      # Model training
-│   └── source_tracker.py # Source management
-├── utils/                # Utility functions
-│   ├── interface_creator.py  # UI components
-│   ├── logging_handler.py    # Logging utilities
-│   └── preview_handler.py    # Data preview
-├── chat_interface/       # Chat functionality
-├── assets/              # Static assets
-├── logs/                # Application logs
-└── training_data/       # Processed data
+├── app.py # Main entry point
+├── core/ # Core application logic
+│ ├── app.py # Main application class
+│ └── handlers/ # Request handlers
+├── data_processor/ # Data processing modules
+│ ├── extractors/ # PDF and URL processors
+│ ├── formatters/ # Data formatting
+│ ├── fine_tuning/ # Model training
+│ └── source_tracker.py # Source management
+├── utils/ # Utility functions
+│ ├── interface_creator.py # UI components
+│ ├── logging_handler.py # Logging utilities
+│ └── preview_handler.py # Data preview
+├── chat_interface/ # Chat functionality
+├── assets/ # Static assets
+├── logs/ # Application logs
+└── training_data/ # Processed data
 ```
+
+
+## 🚀 Features
+
+- **Document Processing**
+  - PDF text extraction with context preservation
+  - URL content scraping with recursive crawling
+  - Batch processing support
+  - Source tracking and management
+
+- **RAG Implementation**
+  - FAISS-powered vector similarity search
+  - Dynamic context retrieval
+  - Multiple index support
+  - Real-time index management
+
+- **Chat Interface**
+  - Real-time conversation
+  - Content moderation
+  - Multiple model support
+  - Custom styling and avatars
+
+- **Model Management**
+  - Fine-tuning capabilities
+  - Training progress monitoring
+  - Model version control
+  - Performance analytics
 
 ## 🛠️ Development
 
-- Uses modern Python features and type hints
-- Follows modular design principles
-- Implements proper error handling
-- Includes real-time logging
-- Maintains clean code structure
+### Prerequisites
 
-### Key Dependencies
+- Python 3.9+
+- OpenAI API key
+- FAISS library
+- Gradio framework
 
-- `openai`: OpenAI API client (v1.0+)
-- `gradio`: Web interface framework
-- `PyPDF2`: PDF processing
-- `spacy`: NLP processing
-- `beautifulsoup4`: Web scraping
-- `python-dotenv`: Environment management
+### Installation
+
+1. Clone the repository:
+
+```
+bash
+git clone [repository-url] 
+cd sfbu-omni-chat
+```
+
+
+2. Create and activate virtual environment:
+
+```
+bash
+python -m venv venv
+source venv/bin/activate # On Windows: venv\Scripts\activate
+```
+
+
+3. Install dependencies:
+
+```
+bash
+pip install -r requirements.txt
+```
+
+
+4. Set up environment variables:
+
+```
+OPENAI_API_KEY=your_openai_api_key
+```
+
+
+### Running the Application
+
+```
+bash
+python app.py
+```
+
+
+The interface will be available at `http://localhost:7860`
+
+## 📚 Key Dependencies
+
+- **Core Functionality**
+  - `openai>=1.0.0` - OpenAI API integration
+  - `faiss-cpu>=1.7.4` - Vector similarity search
+  - `gradio>=4.0.0` - Web interface framework
+
+- **Document Processing**
+  - `PyPDF2>=3.0.0` - PDF processing
+  - `beautifulsoup4>=4.12.0` - Web scraping
+  - `requests>=2.31.0` - HTTP client
+
+- **Security & Logging**
+  - `cryptography>=41.0.0` - Security operations
+  - `structlog>=23.2.0` - Structured logging
+  - `urllib3>=2.1.0` - HTTP client
+
+## 🔒 Security Features
+
+- Content moderation using OpenAI's moderation API
+- Secure API key management
+- Input validation and sanitization
+- Rate limiting and request throttling
+
+## 📝 Documentation
+
+Detailed documentation is available in the `/docs` directory:
+- API Reference
+- Architecture Overview
+- Development Guide
+- Deployment Instructions
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-This project is proprietary and confidential. All rights reserved by San Francisco Bay University.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Guided by Prof. Henry Chang
-- Powered by San Francisco Bay University
-- Built with OpenAI's GPT technology
-
-## 💡 Support
-
-For support, please contact:
-- SFBU IT Department
-- Project maintainers through GitHub issues
-
----
-© 2024 San Francisco Bay University. All rights reserved.
+- San Francisco Bay University for support and resources
+- Henry Chang for guidance and course materials
+- OpenAI for API and model access
+- FAISS team for vector similarity implementation
+- Gradio team for the UI framework

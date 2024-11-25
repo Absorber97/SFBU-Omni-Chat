@@ -19,60 +19,106 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
 
 # Virtual Environment
 venv/
 env/
 ENV/
+.env
+.venv/
+pythonenv*/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
 
 # Project specific
 training_data/*
 !training_data/.gitkeep
 logs/*
 !logs/.gitkeep
-.env
 formatted_data.jsonl
 *.jsonl
 !examples/*.jsonl  # Keep example JSONL files
 
-# Keep assets directory structure
-!assets/
-!assets/images/
-!assets/images/*.jpeg
-!assets/images/*.jpg
-!assets/images/*.png
-!assets/images/*.pdf  # Allow PDF files in assets
-
-# Model files
+# Model & Vector Data
 *.pkl
 *.h5
 *.model
 *.bin
+*.faiss
+*.index
 fine_tuned_sources.json
+rag_processing/storage/*
+!rag_processing/storage/.gitkeep
 
-# Logs
+# Assets - Keep structure but ignore specific files
+assets/*
+!assets/images/
+assets/images/*
+!assets/images/*.jpeg
+!assets/images/*.jpg
+!assets/images/*.png
+!assets/images/SFBU.jpeg
+!assets/images/Bayhawk.jpeg
+
+# Logs and Databases
 *.log
 *.log.*
-log/
+*.sqlite
+*.db
+*.hdf5
 
-# Temporary files
-tmp/
-temp/
-.tmp/
-.temp/
+# Environment Variables
+.env
+.env.*
+!.env.example
 
-# OS specific
+# System Files
 .DS_Store
 Thumbs.db
 .directory
 desktop.ini
+$RECYCLE.BIN/
+System Volume Information/
+*.lnk
 
-# Keep specific directories but ignore their contents
-!training_data/
-!logs/
+# Temporary Files
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# Documentation Build
+docs/_build/
+docs/_static/
+docs/_templates/
+site/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Profiling
+.prof
+*.prof
+profile_default/
+ipython_config.py
+
+# Keep empty directories
+!.gitkeep
