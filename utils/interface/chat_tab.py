@@ -52,38 +52,30 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
             
         try:
             # First set the model in both handlers
-            app.chat_manager.set_model(model_id)  # No need to check status as it raises exceptions
-            model_handler.select_model(model_id)  # Keep model handler in sync
+            app.chat_manager.set_model(model_id)
+            model_handler.select_model(model_id)
             
+            context_text = None
             if use_rag:
                 try:
-                    # Ensure RAG index is loaded
                     rag_handler._load_index(rag_index)
                     contexts = rag_handler.get_relevant_context(message)
                     
-                    if contexts:  # Only add context if we got relevant results
-                        # Format contexts with scores for better context utilization
+                    if contexts:
                         context_text = "\n\n".join([
                             f"Relevant context (confidence: {c['score']:.2f}):\n"
                             f"Q: {c['metadata']['question']}\n"
                             f"A: {c['metadata']['answer']}"
                             for c in contexts
                         ])
-                        
-                        system_message = (
-                            "You are a helpful assistant for San Francisco Bay University. "
-                            "Use the following relevant context to inform your response, "
-                            "but maintain a natural conversational tone:\n\n"
-                            f"{context_text}"
-                        )
-                    else:
-                        system_message = "You are a helpful assistant for San Francisco Bay University."
                 except Exception as e:
-                    # If RAG fails, fall back to regular chat
-                    system_message = "You are a helpful assistant for San Francisco Bay University."
                     app.logger.warning(f"RAG retrieval failed, falling back to regular chat: {str(e)}")
-            else:
-                system_message = "You are a helpful assistant for San Francisco Bay University."
+            
+            # Get appropriate system prompt based on context and RAG status
+            system_message = app.chat_styling.get_system_prompt(
+                context=context_text,
+                rag_enabled=use_rag
+            )
             
             messages = [{"role": "system", "content": system_message}]
             
@@ -99,7 +91,7 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
                 # Generate response with appropriate temperature
                 response = app.chat_manager.generate_response(
                     messages=messages,
-                    temperature=0.7 if use_rag else 0.9
+                    temperature=0.7
                 )
                 
                 if response:
