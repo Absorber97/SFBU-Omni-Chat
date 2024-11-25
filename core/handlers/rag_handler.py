@@ -26,6 +26,7 @@ class RAGHandler:
         self.logger = logging.getLogger(__name__)
         self.storage_dir = Path("rag_processing/storage")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.active_index: Optional[str] = None
         
         # Try to load last active index
         self._load_last_active()
@@ -97,6 +98,7 @@ class RAGHandler:
         """Mark an index as the last active one"""
         with open(self.storage_dir / "last_active.txt", "w") as f:
             f.write(name)
+        self.active_index = name
     
     def _load_last_active(self) -> None:
         """Load the last active index if it exists"""
@@ -132,9 +134,10 @@ class RAGHandler:
             shutil.rmtree(storage_path)
             
         # If this was the active index, clear current state
-        if self.index is not None:
+        if self.active_index == name:
             self.index = None
             self.documents = []
+            self.active_index = None
             
             # Remove last_active marker if it exists
             try:
@@ -232,3 +235,11 @@ class RAGHandler:
         except Exception as e:
             self.logger.error(f"Error during search: {str(e)}")
             return []
+    
+    def get_active_index(self) -> Optional[str]:
+        """Get the name of the currently active index"""
+        try:
+            with open(self.storage_dir / "last_active.txt", "r") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            return None
