@@ -12,16 +12,22 @@ class ChatModeHandler:
         query: str,
         role: str,
         role_prompt: str,
-        history: Optional[List] = None
+        history: Optional[List] = None,
+        rag_context: Optional[str] = None
     ) -> str:
         """Handle chat messages with role-specific context"""
         try:
             # Format chat history
             chat_history = self._format_history(history) if history else []
             
+            # Combine role prompt with RAG context if available
+            system_prompt = role_prompt
+            if rag_context:
+                system_prompt = f"{role_prompt}\n\nRelevant Context:\n{rag_context}"
+            
             # Construct messages array
             messages = [
-                {"role": "system", "content": role_prompt},
+                {"role": "system", "content": system_prompt},
                 *chat_history,
                 {"role": "user", "content": query}
             ]
@@ -39,8 +45,11 @@ class ChatModeHandler:
         except Exception as e:
             return f"I apologize, but I encountered an error: {str(e)}"
             
-    def _format_history(self, history: List) -> List[Dict[str, str]]:
+    def _format_history(self, history: List[List[str]]) -> List[Dict[str, str]]:
         """Format chat history for the API"""
+        if not history:
+            return []
+            
         formatted_history = []
         for user_msg, assistant_msg in history:
             formatted_history.extend([

@@ -1,27 +1,20 @@
+from typing import Dict, List, Any, Tuple, Optional
 import gradio as gr
-from typing import Dict, List, Optional, Any, Tuple
-from config import MODEL_CONFIG
 from core.handlers.premium_response_handler import PremiumResponseHandler
-from core.types import (
-    UserRole,
-    ChatMode,
-    ChatHistory,
-    ChatResponse,
-    DiscoveryContent,
-    GradioResponse
-)
+from utils.interface.components.model_rag_selector import create_model_rag_selector
+from utils.types import UserRole, ChatMode
 
 def create_premium_chat_tab(app, model_handler, rag_handler):
     """Create the premium chat tab with role-based and discovery modes"""
-    
     response_handler = PremiumResponseHandler(rag_handler)
     
-    # Role-based avatars with emojis
+    # Role-based avatars
     role_avatars = {
-        UserRole.STUDENT.value: "👨‍🎓",
-        UserRole.FACULTY.value: "👨‍🏫",
-        UserRole.STAFF.value: "👨‍💼",
-        UserRole.VISITOR.value: "👤"
+        "user": "assets/images/Bayhawk.jpeg",
+        "student": "assets/images/Student.jpeg",
+        "faculty": "assets/images/Faculty.jpeg",
+        "staff": "assets/images/Staff.jpeg",
+        "visitor": "assets/images/Visitor.jpeg"
     }
     
     # Categories for discovery mode
@@ -44,120 +37,6 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
             return {
                 chat_container: gr.update(visible=False),
                 discovery_container: gr.update(visible=True)
-            }
-    
-    async def handle_chat(
-        message: str,
-        history: ChatHistory,
-        role: str,
-        model_name: str,
-        use_rag: bool,
-        rag_index: str
-    ) -> Tuple[str, ChatHistory, GradioResponse]:
-        """Handle chat messages"""
-        if not message:
-            return "", history, {"error": "Please enter a message"}
-            
-        if not model_name:
-            return "", history, {"error": "Please select a model first"}
-            
-        if use_rag and not rag_index:
-            return "", history, {"error": "Please select a RAG index first"}
-            
-        try:
-            # Set the model
-            model_handler.select_model(model_name)
-            
-            # Load RAG index if enabled
-            if use_rag and rag_index:
-                rag_handler._load_index(rag_index)
-            
-            # Generate response with RAG integration
-            result = await response_handler.generate_chat_response(
-                query=message,
-                role=role,
-                history=history,
-                use_rag=use_rag
-            )
-            
-            if result["status"] == "success":
-                history.append((message, result["response"]))
-                return "", history, {
-                    "status": "success",
-                    "has_rag": result["has_rag_context"]
-                }
-            else:
-                return "", history, {
-                    "error": result["error"],
-                    "has_rag": result["has_rag_context"]
-                }
-                
-        except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            return "", history, {"error": error_msg, "has_rag": False}
-    
-    async def handle_discovery(
-        category: str,
-        subcategory: str,
-        model_name: str,
-        use_rag: bool,
-        rag_index: str
-    ) -> Dict[Any, Any]:
-        """Handle discovery mode interactions"""
-        try:
-            # Set the model
-            model_handler.select_model(model_name)
-            
-            # Load RAG index if enabled
-            if use_rag and rag_index:
-                rag_handler._load_index(rag_index)
-            
-            # Generate content with RAG integration
-            result = await response_handler.generate_discovery_content(
-                category=f"{category} - {subcategory}",
-                use_rag=use_rag
-            )
-            
-            if result["status"] == "success":
-                return {
-                    summary_box: result["summary"],
-                    detailed_box: result["detailed"],
-                    steps_box: result["steps"],
-                    faq_box: result["faq"],
-                    suggestions_box: gr.update(choices=result["suggestions"]),
-                    followups_box: gr.update(choices=result["followups"]),
-                    system_info: {
-                        "status": "success",
-                        "has_rag": result["has_rag_context"]
-                    }
-                }
-            else:
-                return {
-                    summary_box: result["summary"],
-                    detailed_box: result["detailed"],
-                    steps_box: result["steps"],
-                    faq_box: result["faq"],
-                    suggestions_box: gr.update(choices=[]),
-                    followups_box: gr.update(choices=[]),
-                    system_info: {
-                        "error": result["error"],
-                        "has_rag": result["has_rag_context"]
-                    }
-                }
-                
-        except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            return {
-                summary_box: error_msg,
-                detailed_box: "An error occurred",
-                steps_box: "",
-                faq_box: "",
-                suggestions_box: gr.update(choices=[]),
-                followups_box: gr.update(choices=[]),
-                system_info: {
-                    "error": error_msg,
-                    "has_rag": False
-                }
             }
     
     with gr.Tab("🔮 Premium Chat"):
@@ -225,11 +104,22 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                     interactive=True
                 )
                 
-                # Chat interface
+                # Chat interface with avatars
                 chatbot = gr.Chatbot(
                     label="Premium SFBU Assistant",
                     bubble_full_width=False,
-                    height=400
+                    height=400,
+                    avatar_images=(role_avatars["user"], role_avatars[UserRole.STUDENT.value])
+                )
+                
+                # Update avatar when role changes
+                def update_avatar(role):
+                    return gr.update(avatar_images=(role_avatars["user"], role_avatars[role]))
+                
+                role.change(
+                    fn=update_avatar,
+                    inputs=[role],
+                    outputs=[chatbot]
                 )
                 
                 with gr.Row():
@@ -243,25 +133,7 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                     with gr.Column(scale=1):
                         send = gr.Button("Send 📤", variant="primary")
                         clear = gr.Button("Clear 🗑️")
-                
-                # Event handlers
-                send.click(
-                    fn=handle_chat,
-                    inputs=[msg, chatbot, role, model_selector, use_rag, rag_index_selector],
-                    outputs=[msg, chatbot, system_info]
-                )
-                
-                msg.submit(
-                    fn=handle_chat,
-                    inputs=[msg, chatbot, role, model_selector, use_rag, rag_index_selector],
-                    outputs=[msg, chatbot, system_info]
-                )
-                
-                clear.click(
-                    fn=lambda: (None, None, {"status": "cleared"}),
-                    outputs=[msg, chatbot, system_info]
-                )
-                
+            
             # Discovery Mode Container
             with gr.Column(visible=False) as discovery_container:
                 # Category selection
@@ -306,30 +178,103 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                                 label="Follow-up Questions",
                                 interactive=True
                             )
+            
+            # Event handlers
+            def update_subcategories(cat):
+                return gr.update(choices=categories[cat])
+            
+            category.change(
+                fn=update_subcategories,
+                inputs=[category],
+                outputs=[subcategory]
+            )
+            
+            async def handle_chat(
+                message: str,
+                chat_history: List[List[str]],
+                role: str,
+                model_name: str,
+                use_rag: bool,
+                rag_index: str
+            ) -> Tuple[str, List[List[str]], Dict[str, Any]]:
+                """Handle chat messages"""
+                if not message:
+                    return "", chat_history, {
+                        "outputs": {},
+                        "status": "error",
+                        "has_rag": False,
+                        "error": "Please enter a message"
+                    }
                 
-                # Event handlers
-                def update_subcategories(cat):
-                    return gr.update(choices=categories[cat])
+                if not model_name:
+                    return "", chat_history, {
+                        "outputs": {},
+                        "status": "error",
+                        "has_rag": False,
+                        "error": "Please select a model first"
+                    }
+                
+                if use_rag and not rag_index:
+                    return "", chat_history, {
+                        "outputs": {},
+                        "status": "error",
+                        "has_rag": False,
+                        "error": "Please select a RAG index first"
+                    }
+                
+                try:
+                    # Generate response with RAG integration
+                    result = await response_handler.handle_chat_message(
+                        message=message,
+                        role=role,
+                        history=chat_history,
+                        model_name=model_name,
+                        use_rag=use_rag,
+                        rag_index=rag_index
+                    )
                     
-                category.change(
-                    fn=update_subcategories,
-                    inputs=[category],
-                    outputs=[subcategory]
-                )
-                
-                subcategory.change(
-                    fn=handle_discovery,
-                    inputs=[category, subcategory, model_selector, use_rag, rag_index_selector],
-                    outputs=[
-                        summary_box,
-                        detailed_box,
-                        steps_box,
-                        faq_box,
-                        suggestions_box,
-                        followups_box,
-                        system_info
-                    ]
-                )
+                    if result["status"] == "success":
+                        chat_history.append([message, result["response"]])
+                        return "", chat_history, {
+                            "outputs": {},
+                            "status": "success",
+                            "has_rag": result["has_rag_context"],
+                            "error": None
+                        }
+                    else:
+                        return "", chat_history, {
+                            "outputs": {},
+                            "status": "error",
+                            "has_rag": result["has_rag_context"],
+                            "error": result["error"]
+                        }
+                    
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    return "", chat_history, {
+                        "outputs": {},
+                        "status": "error",
+                        "has_rag": False,
+                        "error": error_msg
+                    }
+            
+            # Connect event handlers
+            send.click(
+                fn=handle_chat,
+                inputs=[msg, chatbot, role, model_selector, use_rag, rag_index_selector],
+                outputs=[msg, chatbot, system_info]
+            )
+            
+            msg.submit(
+                fn=handle_chat,
+                inputs=[msg, chatbot, role, model_selector, use_rag, rag_index_selector],
+                outputs=[msg, chatbot, system_info]
+            )
+            
+            clear.click(
+                fn=lambda: (None, None, {"status": "cleared"}),
+                outputs=[msg, chatbot, system_info]
+            )
             
             # Mode switching handler
             mode_toggle.change(
@@ -362,3 +307,5 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                 ),
                 outputs=[rag_index_selector]
             )
+            
+            return chat_container

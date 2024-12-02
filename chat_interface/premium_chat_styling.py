@@ -224,3 +224,88 @@
         border-color: #666;
     }
 }
+
+/* Role Avatars */
+.role-avatar {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #1a73e8;
+}
+
+.role-selector img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* Chat Avatars */
+.message-avatar {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-avatar {
+    border: 2px solid #1a73e8;
+}
+
+.student-avatar {
+    border: 2px solid #2e7d32;
+}
+
+.faculty-avatar {
+    border: 2px solid #1565c0;
+}
+
+.staff-avatar {
+    border: 2px solid #ef6c00;
+}
+
+.visitor-avatar {
+    border: 2px solid #7b1fa2;
+}
+
+/* Chat Messages with Avatars */
+.message-bubble {
+    position: relative;
+    padding-left: 48px;
+}
+
+.message-bubble .message-avatar {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+/* Role Selection with Avatars */
+.role-selector {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.role-option {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.role-option:hover {
+    transform: translateY(-2px);
+}
+
+.role-option.selected {
+    background: rgba(26, 115, 232, 0.1);
+}
+
+.role-option img {
+    margin-right: 8px;
+}
