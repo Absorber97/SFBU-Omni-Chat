@@ -8,25 +8,41 @@ class DiscoveryModeHandler:
         self.rag_handler = rag_handler
         self.client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         
-    async def generate_content(self, category: str, subcategory: str) -> Dict:
+    async def generate_content(self, category_input: str) -> Dict:
+        """Generate comprehensive content for discovery mode"""
         try:
-            # Get RAG context for the category
-            rag_context = await self._get_rag_context(f"{category} {subcategory}")
+            # Parse category input
+            category_parts = category_input.split(" - ", 1)
+            if len(category_parts) != 2:
+                raise ValueError("Invalid category format. Expected 'Category - Subcategory'")
+                
+            category, subcategory = category_parts
             
-            # Generate comprehensive content for discovery mode
-            prompt = f"""Generate comprehensive information about {category} - {subcategory} at SFBU.
-            Use this context when relevant: {rag_context}
+            # Extract context if provided
+            context = ""
+            if "Relevant Context:" in category_input:
+                _, context_part = category_input.split("Relevant Context:", 1)
+                context = context_part.strip()
             
-            Include:
-            1. A brief summary (2-3 sentences)
-            2. Detailed explanation (2-3 paragraphs)
-            3. Step-by-step guide if applicable (numbered steps)
-            4. Common FAQs (3-5 questions)
-            5. Related topics (3-5 suggestions)
-            6. Follow-up questions (3-5 questions)
+            # Build context part of prompt
+            context_section = ""
+            if context:
+                context_section = f"Using this context when relevant:\n{context}\n\n"
             
-            Format the response as a JSON object with these keys:
-            summary, detailed, steps, faq, suggestions, followups"""
+            # Generate comprehensive content
+            prompt = (
+                f"Generate comprehensive information about {category} - {subcategory} at SFBU.\n"
+                f"{context_section}"
+                "Include:\n"
+                "1. A brief summary (2-3 sentences)\n"
+                "2. Detailed explanation (2-3 paragraphs)\n"
+                "3. Step-by-step guide if applicable (numbered steps)\n"
+                "4. Common FAQs (3-5 questions)\n"
+                "5. Related topics (3-5 suggestions)\n"
+                "6. Follow-up questions (3-5 questions)\n\n"
+                "Format the response as a JSON object with these keys:\n"
+                "summary, detailed, steps, faq, suggestions, followups"
+            )
             
             response = await self.client.chat.completions.create(
                 model=OPENAI_MODELS[ModelType.CHAT.value],

@@ -2,8 +2,14 @@ import gradio as gr
 from typing import Dict, List, Optional, Any, Tuple
 from config import MODEL_CONFIG
 from core.handlers.premium_response_handler import PremiumResponseHandler
-from utils.types import UserRole, ChatMode, ChatHistory
-import json
+from core.types import (
+    UserRole,
+    ChatMode,
+    ChatHistory,
+    ChatResponse,
+    DiscoveryContent,
+    GradioResponse
+)
 
 def create_premium_chat_tab(app, model_handler, rag_handler):
     """Create the premium chat tab with role-based and discovery modes"""
@@ -27,41 +33,7 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
         "Career": ["Jobs", "Internships", "Development", "Alumni"]
     }
     
-    def refresh_rag_indices() -> Tuple[gr.Dropdown, Dict[str, Any]]:
-        """Refresh available RAG indices"""
-        try:
-            indices = rag_handler.get_available_indices()
-            index_choices = [idx['name'] for idx in indices]
-            current_index = rag_handler.get_active_index()
-            return (
-                gr.Dropdown(choices=index_choices, value=current_index),
-                {"active_index": current_index or "None"}
-            )
-        except Exception as e:
-            return (
-                gr.Dropdown(choices=[], value=None),
-                {"active_index": "None", "error": str(e)}
-            )
-    
-    def load_rag_index(index_name: str) -> Dict[str, Any]:
-        """Load selected RAG index"""
-        try:
-            if not index_name:
-                return {"active_index": "None", "status": "error", "message": "No index selected"}
-            rag_handler._load_index(index_name)
-            return {
-                "active_index": index_name,
-                "status": "success",
-                "message": f"Successfully loaded index: {index_name}"
-            }
-        except Exception as e:
-            return {
-                "active_index": "None",
-                "status": "error",
-                "message": f"Error loading index: {str(e)}"
-            }
-    
-    def switch_mode(mode: str):
+    def switch_mode(mode: str) -> Dict[Any, Any]:
         """Switch between chat and discovery modes"""
         if mode == ChatMode.CHAT.value:
             return {
@@ -81,7 +53,7 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
         model_name: str,
         use_rag: bool,
         rag_index: str
-    ) -> Tuple[str, ChatHistory, Dict[str, Any]]:
+    ) -> Tuple[str, ChatHistory, GradioResponse]:
         """Handle chat messages"""
         if not message:
             return "", history, {"error": "Please enter a message"}
@@ -96,35 +68,33 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
             # Set the model
             model_handler.select_model(model_name)
             
-            # Get RAG context if enabled
-            context_text = None
-            if use_rag:
-                try:
-                    rag_handler._load_index(rag_index)
-                    contexts = rag_handler.get_relevant_context(message)
-                    if contexts:
-                        context_text = "\n\n".join([
-                            f"Relevant context (confidence: {c['score']:.2f}):\n"
-                            f"Q: {c['metadata']['question']}\n"
-                            f"A: {c['metadata']['answer']}"
-                            for c in contexts
-                        ])
-                except Exception as e:
-                    print(f"RAG retrieval failed: {str(e)}")
+            # Load RAG index if enabled
+            if use_rag and rag_index:
+                rag_handler._load_index(rag_index)
             
-            response = await response_handler.generate_chat_response(
+            # Generate response with RAG integration
+            result = await response_handler.generate_chat_response(
                 query=message,
                 role=role,
                 history=history,
-                context=context_text
+                use_rag=use_rag
             )
             
-            history.append((message, response))
-            return "", history, {"status": "success"}
-            
+            if result["status"] == "success":
+                history.append((message, result["response"]))
+                return "", history, {
+                    "status": "success",
+                    "has_rag": result["has_rag_context"]
+                }
+            else:
+                return "", history, {
+                    "error": result["error"],
+                    "has_rag": result["has_rag_context"]
+                }
+                
         except Exception as e:
             error_msg = f"Error: {str(e)}"
-            return "", history, {"error": error_msg}
+            return "", history, {"error": error_msg, "has_rag": False}
     
     async def handle_discovery(
         category: str,
@@ -132,58 +102,65 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
         model_name: str,
         use_rag: bool,
         rag_index: str
-    ) -> Dict[str, Any]:
+    ) -> Dict[Any, Any]:
         """Handle discovery mode interactions"""
         try:
             # Set the model
             model_handler.select_model(model_name)
             
-            # Get RAG context if enabled
-            context_text = None
+            # Load RAG index if enabled
             if use_rag and rag_index:
-                try:
-                    rag_handler._load_index(rag_index)
-                    contexts = rag_handler.get_relevant_context(f"{category} {subcategory}")
-                    if contexts:
-                        context_text = "\n\n".join([c['content'] for c in contexts])
-                except Exception as e:
-                    print(f"RAG retrieval failed: {str(e)}")
+                rag_handler._load_index(rag_index)
             
-            content = await response_handler.generate_discovery_content(
-                f"{category} - {subcategory}",
-                context=context_text
+            # Generate content with RAG integration
+            result = await response_handler.generate_discovery_content(
+                category=f"{category} - {subcategory}",
+                use_rag=use_rag
             )
             
-            return {
-                summary_box: content["summary"],
-                detailed_box: content["detailed"],
-                steps_box: content["steps"],
-                faq_box: content["faq"],
-                suggestions_box: gr.update(choices=content["suggestions"]),
-                followups_box: gr.update(choices=content["followups"]),
-                system_info: {"status": "success"}
-            }
-            
+            if result["status"] == "success":
+                return {
+                    summary_box: result["summary"],
+                    detailed_box: result["detailed"],
+                    steps_box: result["steps"],
+                    faq_box: result["faq"],
+                    suggestions_box: gr.update(choices=result["suggestions"]),
+                    followups_box: gr.update(choices=result["followups"]),
+                    system_info: {
+                        "status": "success",
+                        "has_rag": result["has_rag_context"]
+                    }
+                }
+            else:
+                return {
+                    summary_box: result["summary"],
+                    detailed_box: result["detailed"],
+                    steps_box: result["steps"],
+                    faq_box: result["faq"],
+                    suggestions_box: gr.update(choices=[]),
+                    followups_box: gr.update(choices=[]),
+                    system_info: {
+                        "error": result["error"],
+                        "has_rag": result["has_rag_context"]
+                    }
+                }
+                
         except Exception as e:
-            error_content = {
-                "summary": f"Error: {str(e)}",
-                "detailed": "An error occurred",
-                "steps": "",
-                "faq": "",
-                "suggestions": [],
-                "followups": []
-            }
+            error_msg = f"Error: {str(e)}"
             return {
-                summary_box: error_content["summary"],
-                detailed_box: error_content["detailed"],
-                steps_box: error_content["steps"],
-                faq_box: error_content["faq"],
-                suggestions_box: gr.update(choices=error_content["suggestions"]),
-                followups_box: gr.update(choices=error_content["followups"]),
-                system_info: {"error": str(e)}
+                summary_box: error_msg,
+                detailed_box: "An error occurred",
+                steps_box: "",
+                faq_box: "",
+                suggestions_box: gr.update(choices=[]),
+                followups_box: gr.update(choices=[]),
+                system_info: {
+                    "error": error_msg,
+                    "has_rag": False
+                }
             }
     
-    with gr.Tab("Premium Chat"):
+    with gr.Tab("🔮 Premium Chat"):
         with gr.Column():
             # RAG Configuration
             with gr.Group():
@@ -369,17 +346,19 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
             )
             
             rag_index_selector.change(
-                fn=load_rag_index,
+                fn=lambda idx: {"active_index": idx},
                 inputs=[rag_index_selector],
                 outputs=[rag_status]
             )
             
             model_refresh_btn.click(
-                fn=lambda: gr.Dropdown(choices=model_handler.load_available_models()),
+                fn=lambda: gr.update(choices=model_handler.load_available_models()),
                 outputs=[model_selector]
             )
             
             rag_refresh_btn.click(
-                fn=refresh_rag_indices,
-                outputs=[rag_index_selector, rag_status]
+                fn=lambda: gr.update(
+                    choices=[idx['name'] for idx in rag_handler.get_available_indices()]
+                ),
+                outputs=[rag_index_selector]
             )

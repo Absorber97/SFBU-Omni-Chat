@@ -14,23 +14,19 @@ class ChatModeHandler:
         role_prompt: str,
         history: Optional[List] = None
     ) -> str:
+        """Handle chat messages with role-specific context"""
         try:
-            # Get RAG context if available
-            rag_context = await self._get_rag_context(query)
-            
-            # Combine history for context
+            # Format chat history
             chat_history = self._format_history(history) if history else []
             
-            # Construct the full prompt
-            system_prompt = f"{role_prompt}\n\nUse this additional context when relevant: {rag_context}"
-            
+            # Construct messages array
             messages = [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": role_prompt},
                 *chat_history,
                 {"role": "user", "content": query}
             ]
             
-            # Use OpenAI API to generate response
+            # Generate response
             response = await self.client.chat.completions.create(
                 model=OPENAI_MODELS[ModelType.CHAT.value],
                 messages=messages,
@@ -42,20 +38,6 @@ class ChatModeHandler:
             
         except Exception as e:
             return f"I apologize, but I encountered an error: {str(e)}"
-            
-    async def _get_rag_context(self, query: str) -> str:
-        """Get relevant context from RAG system"""
-        if not self.rag_handler:
-            return ""
-            
-        try:
-            docs = await self.rag_handler.get_relevant_docs(query)
-            context = "\n".join([doc.page_content for doc in docs])
-            return context if context else ""
-            
-        except Exception as e:
-            print(f"RAG error: {str(e)}")
-            return ""
             
     def _format_history(self, history: List) -> List[Dict[str, str]]:
         """Format chat history for the API"""

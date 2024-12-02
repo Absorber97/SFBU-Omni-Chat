@@ -39,7 +39,7 @@ class ModelRAGSelector:
         """Handle RAG index selection change"""
         try:
             if index_name:
-                await self.rag_handler.load_index(index_name)
+                self.rag_handler._load_index(index_name)
                 return {"status": "success", "message": f"RAG index set to: {index_name}"}
             return {"status": "error", "message": "No index selected"}
         except Exception as e:
