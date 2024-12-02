@@ -8,6 +8,21 @@ class ChatStyling:
         self.user_avatar = str(self.assets_path / "Bayhawk.jpeg")
         self.assistant_avatar = str(self.assets_path / "SFBU.jpeg")
         
+        # Add new styling options
+        self.response_formats = {
+            "quick": "summary_style",
+            "detailed": "detailed_style",
+            "steps": "step_by_step_style",
+            "faq": "faq_style"
+        }
+        
+        self.role_based_themes = {
+            "student": "student_theme",
+            "faculty": "faculty_theme",
+            "staff": "staff_theme",
+            "visitor": "visitor_theme"
+        }
+        
     def get_avatars(self) -> Tuple[str, str]:
         """Get avatar paths for user and assistant"""
         return self.user_avatar, self.assistant_avatar
