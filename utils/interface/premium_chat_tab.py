@@ -3,10 +3,13 @@ import gradio as gr
 from core.handlers.premium_response_handler import PremiumResponseHandler
 from utils.interface.components.model_rag_selector import create_model_rag_selector
 from utils.types import UserRole, ChatMode
+from utils.interface.discovery.discovery_handler import DiscoveryHandler
+from utils.interface.discovery.components.discovery_container import DiscoveryContainer
 
 def create_premium_chat_tab(app, model_handler, rag_handler):
     """Create the premium chat tab with role-based and discovery modes"""
     response_handler = PremiumResponseHandler(rag_handler)
+    discovery_handler = DiscoveryHandler(model_handler, rag_handler)
     
     # Role-based avatars
     role_avatars = {
@@ -26,18 +29,18 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
         "Career": ["Jobs", "Internships", "Development", "Alumni"]
     }
     
-    def switch_mode(mode: str) -> Dict[Any, Any]:
+    def switch_mode(mode: str) -> Tuple[Any, Any]:
         """Switch between chat and discovery modes"""
         if mode == ChatMode.CHAT.value:
-            return {
-                chat_container: gr.update(visible=True),
-                discovery_container: gr.update(visible=False)
-            }
+            return (
+                gr.update(visible=True),  # chat container
+                gr.update(visible=False)   # discovery container
+            )
         else:
-            return {
-                chat_container: gr.update(visible=False),
-                discovery_container: gr.update(visible=True)
-            }
+            return (
+                gr.update(visible=False),  # chat container
+                gr.update(visible=True)    # discovery container
+            )
     
     with gr.Tab("🔮 Premium Chat"):
         with gr.Column():
@@ -135,59 +138,7 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                         clear = gr.Button("Clear 🗑️")
             
             # Discovery Mode Container
-            with gr.Column(visible=False) as discovery_container:
-                # Category selection
-                with gr.Row():
-                    category = gr.Dropdown(
-                        choices=list(categories.keys()),
-                        label="Select Category",
-                        interactive=True
-                    )
-                    
-                    subcategory = gr.Dropdown(
-                        choices=[],
-                        label="Select Topic",
-                        interactive=True
-                    )
-                
-                # Content display
-                with gr.Column() as content_display:
-                    with gr.Accordion("Quick Summary", open=True):
-                        summary_box = gr.Markdown()
-                    
-                    with gr.Accordion("Detailed Information", open=False):
-                        detailed_box = gr.Markdown()
-                    
-                    with gr.Accordion("Step-by-Step Guide", open=False):
-                        steps_box = gr.Markdown()
-                    
-                    with gr.Accordion("FAQ", open=False):
-                        faq_box = gr.Markdown()
-                    
-                    with gr.Row():
-                        with gr.Column():
-                            suggestions_box = gr.Radio(
-                                choices=[],
-                                label="Related Topics",
-                                interactive=True
-                            )
-                        
-                        with gr.Column():
-                            followups_box = gr.Radio(
-                                choices=[],
-                                label="Follow-up Questions",
-                                interactive=True
-                            )
-            
-            # Event handlers
-            def update_subcategories(cat):
-                return gr.update(choices=categories[cat])
-            
-            category.change(
-                fn=update_subcategories,
-                inputs=[category],
-                outputs=[subcategory]
-            )
+            discovery_container = DiscoveryContainer(discovery_handler).create()
             
             async def handle_chat(
                 message: str,
@@ -223,11 +174,14 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                     }
                 
                 try:
+                    # Convert chat history to tuple format
+                    history_tuples = [(msg[0], msg[1]) for msg in chat_history]
+                    
                     # Generate response with RAG integration
                     result = await response_handler.handle_chat_message(
                         message=message,
                         role=role,
-                        history=chat_history,
+                        history=history_tuples,
                         model_name=model_name,
                         use_rag=use_rag,
                         rag_index=rag_index
@@ -280,7 +234,7 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
             mode_toggle.change(
                 fn=switch_mode,
                 inputs=[mode_toggle],
-                outputs=[chat_container, discovery_container]
+                outputs=[chat_container, discovery_container["container"]]
             )
             
             # Model and RAG selection handlers
