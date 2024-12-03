@@ -30,19 +30,6 @@ class DiscoveryHandler:
             # Update navigation path
             self.current_path.append(suggestion)
             
-            # Set the model
-            self.model_handler.select_model(model_name)
-            logger.info(f"Selected model: {model_name}")
-            
-            # Set RAG index if using RAG
-            if use_rag and rag_index:
-                try:
-                    self.rag_handler._load_index(rag_index)
-                    logger.info(f"Loaded RAG index: {rag_index}")
-                except Exception as e:
-                    logger.error(f"Error loading RAG index: {str(e)}")
-                    use_rag = False
-            
             # Generate content
             content = await self.discovery_handler.generate_content(
                 category_input=suggestion,
@@ -55,30 +42,43 @@ class DiscoveryHandler:
             followups = await self._generate_followups(suggestion, content)
             logger.info(f"Generated {len(followups)} followup suggestions")
             
+            # Create button updates with actual suggestions
+            button_updates = []
+            for i in range(8):
+                if i < len(followups):
+                    button_updates.append(gr.update(
+                        value=followups[i],
+                        visible=True
+                    ))
+                else:
+                    button_updates.append(gr.update(
+                        value="",
+                        visible=False
+                    ))
+            
             # Return all required outputs in correct order
             return [
-                content.get("summary", ""),
-                content.get("detailed", ""),
-                content.get("bullets", ""),
-                content.get("steps", ""),
-                content.get("faq", ""),
-                gr.update(value="\n".join(content.get("suggestions", []))),
-                gr.update(value="\n".join(followups)),
-                " → ".join(self.current_path)
+                content.get("summary", ""),        # Summary markdown
+                content.get("detailed", ""),       # Details markdown
+                content.get("bullets", ""),        # Bullets markdown
+                content.get("steps", ""),          # Steps markdown
+                content.get("faq", ""),            # FAQ markdown
+                *button_updates,                   # 8 suggestion buttons
+                " → ".join(self.current_path)      # Path markdown
             ]
             
         except Exception as e:
             logger.error(f"Error handling suggestion click: {str(e)}", exc_info=True)
             error_msg = f"Error: {str(e)}"
+            # Return error state for all components
             return [
-                error_msg,
-                "An error occurred",
-                "",
-                "",
-                "",
-                gr.update(value=""),
-                gr.update(value=""),
-                " → ".join(self.current_path)
+                error_msg,                  # Summary markdown
+                "An error occurred",        # Details markdown
+                "",                         # Bullets markdown
+                "",                         # Steps markdown
+                "",                         # FAQ markdown
+                *[gr.update(value="", visible=False) for _ in range(8)],  # 8 buttons
+                " → ".join(self.current_path)  # Path markdown
             ]
     
     async def _generate_followups(
@@ -90,62 +90,59 @@ class DiscoveryHandler:
         try:
             logger.info("Generating followup suggestions")
             
-            # Use both RAG and AI to generate relevant follow-ups
-            rag_context = []
-            if self.rag_handler:
-                try:
-                    # Try get_relevant_context first
-                    logger.info("Attempting to get RAG context")
-                    rag_context = await self.rag_handler.get_relevant_context(
-                        query=context,
-                        top_k=5
-                    )
-                    logger.info("Successfully retrieved RAG context")
-                except AttributeError:
-                    logger.warning("get_relevant_context not found, trying get_relevant_docs")
-                    try:
-                        # Fallback to get_relevant_docs
-                        docs = await self.rag_handler.get_relevant_docs(context)
-                        rag_context = [
-                            {"metadata": getattr(doc, "metadata", {}), "content": getattr(doc, "text", "")}
-                            for doc in docs
-                        ]
-                        logger.info("Successfully retrieved RAG docs")
-                    except Exception as e:
-                        logger.error(f"Error getting RAG docs: {str(e)}")
-                        rag_context = []
-            
-            # Extract topics from RAG context
-            rag_topics = []
-            for ctx in rag_context:
-                try:
-                    if isinstance(ctx, dict):
-                        metadata = ctx.get('metadata', {})
-                    else:
-                        metadata = getattr(ctx, 'metadata', {})
-                    
-                    if metadata and 'category' in metadata:
-                        topic = f"🔍 {metadata['category']}: {metadata.get('title', '')}"
-                        rag_topics.append(topic)
-                        logger.debug(f"Added RAG topic: {topic}")
-                except Exception as e:
-                    logger.error(f"Error processing RAG context item: {str(e)}")
-            
             # Get AI-generated suggestions and convert to list if needed
             ai_suggestions = content.get('suggestions', [])
             if isinstance(ai_suggestions, str):
                 ai_suggestions = [s.strip() for s in ai_suggestions.split('\n') if s.strip()]
             
-            # Combine with RAG topics
-            followups = list(ai_suggestions)  # Create new list
-            if rag_topics:
-                followups.extend(rag_topics)
-                logger.info(f"Combined {len(rag_topics)} RAG topics with {len(ai_suggestions)} AI suggestions")
+            # Clean and format suggestions
+            formatted_suggestions = []
+            emojis = ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝']
+            emoji_index = 0
             
-            # Deduplicate and limit
-            unique_followups = list(set(followups))[:8]
-            logger.info(f"Generated {len(unique_followups)} unique followup suggestions")
-            return unique_followups
+            for suggestion in ai_suggestions:
+                # Remove any existing emojis
+                cleaned_suggestion = ' '.join([
+                    word for word in suggestion.split()
+                    if not any(char in word for char in ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝', '🔍'])
+                ]).strip()
+                
+                # Skip if suggestion is too short or incomplete
+                if len(cleaned_suggestion) < 10 or not cleaned_suggestion.endswith(('.', '?')):
+                    continue
+                    
+                # Add single emoji and format
+                formatted_suggestion = f"{emojis[emoji_index % len(emojis)]} {cleaned_suggestion}"
+                formatted_suggestions.append(formatted_suggestion)
+                emoji_index += 1
+            
+            # Add RAG-based suggestions if available
+            if self.rag_handler:
+                try:
+                    rag_context = await self.rag_handler.get_relevant_context(
+                        query=context,
+                        top_k=3  # Limit RAG suggestions
+                    )
+                    
+                    for ctx in rag_context:
+                        if isinstance(ctx, dict):
+                            title = ctx.get('metadata', {}).get('title', '')
+                            if title and len(title) > 10:
+                                formatted_suggestions.append(f"🔍 {title}")
+                except Exception as e:
+                    logger.error(f"Error processing RAG suggestions: {str(e)}")
+            
+            # Deduplicate, limit, and ensure complete sentences
+            unique_suggestions = []
+            seen = set()
+            for suggestion in formatted_suggestions:
+                clean_text = suggestion[2:].lower()  # Remove emoji and lowercase for comparison
+                if clean_text not in seen and len(unique_suggestions) < 8:
+                    seen.add(clean_text)
+                    unique_suggestions.append(suggestion)
+            
+            logger.info(f"Generated {len(unique_suggestions)} unique followup suggestions")
+            return unique_suggestions
             
         except Exception as e:
             logger.error(f"Error generating followups: {str(e)}", exc_info=True)

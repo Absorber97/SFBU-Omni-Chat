@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from openai import AsyncOpenAI
 from config import OPENAI_MODELS, ModelType, MODEL_PARAMS, OPENAI_API_KEY
 import json
@@ -63,16 +63,14 @@ class DiscoveryModeHandler:
                 "- Common questions with detailed answers\n"
                 "- Address potential concerns\n"
                 "- Include practical examples\n\n"
-                "6. RELATED TOPICS (3-5 engaging suggestions)\n"
-                "- Connected areas of interest\n"
-                "- Start each with an emoji\n"
-                "- Make them descriptive and interesting\n\n"
-                "7. FOLLOW-UP QUESTIONS (3-5 thought-provoking questions)\n"
-                "- Questions for deeper exploration\n"
-                "- Start each with an emoji\n"
-                "- Make them engaging and specific\n\n"
+                "6. FOLLOW-UP SUGGESTIONS (6-8 engaging suggestions)\n"
+                "- Mix of related topics and follow-up questions\n"
+                "- Start each with an appropriate emoji\n"
+                "- Include both broad topics and specific questions\n"
+                "- Make them engaging and descriptive\n"
+                "- Ensure variety in suggestion types\n\n"
                 "Format the response as a JSON object with these keys:\n"
-                "summary, detailed, bullets, steps, faq (as {question: answer}), suggestions, followups"
+                "summary, detailed, bullets, steps, faq (as {question: answer}), suggestions"
             )
             
             logger.info("Sending request to OpenAI")
@@ -124,8 +122,10 @@ class DiscoveryModeHandler:
                 "bullets": str(result.get("bullets", "")),
                 "steps": str(result.get("steps", "")),
                 "faq": self._format_faq(result.get("faq", {})),
-                "suggestions": self._format_list(result.get("suggestions", [])),
-                "followups": self._format_list(result.get("followups", []))
+                "suggestions": self._format_suggestions(
+                    result.get("suggestions", []),
+                    rag_context
+                )
             }
             
             return result
@@ -138,8 +138,7 @@ class DiscoveryModeHandler:
                 "bullets": "",
                 "steps": "",
                 "faq": "",
-                "suggestions": "",
-                "followups": ""
+                "suggestions": ""
             }
     
     def _format_faq(self, faq_dict: dict) -> str:
@@ -153,12 +152,66 @@ class DiscoveryModeHandler:
         
         return "\n\n".join(formatted_faqs)
     
-    def _format_list(self, items: list) -> str:
-        """Format a list into a string with line breaks"""
-        if not items:
-            return ""
+    def _format_suggestions(self, ai_suggestions: list, rag_context: str) -> List[str]:
+        """Format and combine AI and RAG suggestions into interactive format"""
+        suggestions = []
         
-        return "\n".join(str(item) for item in items)
+        # Process AI-generated suggestions
+        if isinstance(ai_suggestions, str):
+            ai_suggestions = [s.strip() for s in ai_suggestions.split('\n') if s.strip()]
+        
+        # Format AI suggestions with emojis if not present
+        for suggestion in ai_suggestions:
+            if not any(char in suggestion for char in ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝']):
+                suggestion = f"💡 {suggestion}"
+            suggestions.append(suggestion)
+        
+        # Add RAG-based suggestions
+        if rag_context:
+            try:
+                rag_suggestions = self._extract_rag_suggestions(rag_context)
+                for suggestion in rag_suggestions:
+                    if isinstance(suggestion, dict):
+                        title = suggestion.get('title', '')
+                        category = suggestion.get('category', '')
+                        if title and category:
+                            suggestions.append(f"🔍 {category}: {title}")
+            except Exception as e:
+                logger.error(f"Error processing RAG suggestions: {str(e)}")
+        
+        # Deduplicate and limit while preserving order
+        seen = set()
+        unique_suggestions = []
+        for suggestion in suggestions:
+            if suggestion not in seen and len(unique_suggestions) < 8:
+                seen.add(suggestion)
+                unique_suggestions.append(suggestion)
+        
+        return unique_suggestions
+    
+    def _extract_rag_suggestions(self, rag_context: str) -> List[Dict[str, str]]:
+        """Extract structured suggestions from RAG context"""
+        suggestions = []
+        
+        # Split context into sections
+        sections = rag_context.split('\n\n')
+        
+        for section in sections:
+            # Extract titles and categories
+            try:
+                lines = section.split('\n')
+                title = next((line for line in lines if line.strip()), '')
+                category = next((line for line in reversed(lines) if line.strip()), '')
+                
+                if title and category:
+                    suggestions.append({
+                        'title': title.strip(),
+                        'category': category.strip()
+                    })
+            except Exception:
+                continue
+        
+        return suggestions
     
     async def _get_rag_context(self, query: str) -> str:
         """Get relevant context from RAG system"""

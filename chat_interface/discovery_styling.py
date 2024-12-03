@@ -58,6 +58,42 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
 }
 
+/* Related Topics and Follow-up Questions */
+.related-topics-container,
+.followup-questions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.topic-button,
+.followup-button {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 6px !important;
+    padding: 12px 16px !important;
+    margin: 4px 0 !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 0.95rem !important;
+    transition: all 0.2s ease !important;
+    text-align: left !important;
+    line-height: 1.4 !important;
+    min-height: unset !important;
+    height: auto !important;
+    white-space: normal !important;
+}
+
+.topic-button:hover,
+.followup-button:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    transform: translateY(-1px);
+}
+
 /* Path Visualization */
 .path-container {
     background: rgba(255, 255, 255, 0.08);
@@ -139,5 +175,91 @@
     
     .path-arrow {
         color: #718096;
+    }
+    
+    .related-topics-container,
+    .followup-questions-container {
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .topic-button,
+    .followup-button {
+        background: #f8f9fa !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        color: #2d3748 !important;
+    }
+
+    .topic-button:hover,
+    .followup-button:hover {
+        background: white !important;
+        border-color: rgba(0, 0, 0, 0.15) !important;
+    }
+}
+
+/* Suggestion Section */
+.suggestion-section {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.suggestion-grid {
+    display: flex !important;
+    gap: 1rem !important;
+    margin-top: 1rem !important;
+}
+
+.suggestion-grid > div {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+}
+
+.suggestion-button {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 8px !important;
+    padding: 16px 24px !important;
+    margin: 0 !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 1rem !important;
+    transition: all 0.2s ease !important;
+    height: auto !important;
+    text-align: left !important;
+    line-height: 1.4 !important;
+    min-height: 80px !important;
+    display: flex !important;
+    align-items: center !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.suggestion-button:hover {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Light mode support */
+@media (prefers-color-scheme: light) {
+    .suggestion-section {
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    .suggestion-button {
+        background: #f8f9fa !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        color: #2d3748 !important;
+    }
+    
+    .suggestion-button:hover {
+        background: white !important;
+        border-color: rgba(0, 0, 0, 0.15) !important;
     }
 }

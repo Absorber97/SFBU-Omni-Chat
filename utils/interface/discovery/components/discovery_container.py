@@ -2,7 +2,7 @@ import gradio as gr
 from typing import Dict, Any
 from utils.interface.discovery.components.category_selector import CategorySelector
 from utils.interface.discovery.components.content_display import ContentDisplay
-from utils.interface.discovery.components.suggestion_chips import SuggestionChips, FollowupChips
+from utils.interface.discovery.components.suggestion_chips import SuggestionChips
 from utils.interface.discovery.components.navigation_path import NavigationPath
 
 class DiscoveryContainer:
@@ -16,7 +16,6 @@ class DiscoveryContainer:
         self.category_selector = CategorySelector()
         self.content_display = ContentDisplay()
         self.suggestion_chips = SuggestionChips()
-        self.followup_chips = FollowupChips()
         self.navigation_path = NavigationPath()
     
     def create(self) -> Dict[str, Any]:
@@ -31,30 +30,29 @@ class DiscoveryContainer:
             # Content sections
             content_components = self.content_display.create()
             
-            # Suggestion chips
-            with gr.Row():
-                suggestions = self.suggestion_chips.create()
-                followups = self.followup_chips.create()
+            # Unified suggestion chips
+            suggestions = self.suggestion_chips.create()
             
-            # Event handlers for suggestion buttons
-            for button in suggestion_buttons:
+            # Event handlers for both category and suggestion buttons
+            all_buttons = suggestion_buttons + suggestions["buttons"]
+            
+            for button in all_buttons:
                 button.click(
                     fn=self.discovery_handler.handle_suggestion_click,
                     inputs=[
                         button,
-                        self.model_selector,  # Use selected model
-                        self.use_rag,        # Use RAG setting
-                        self.rag_selector    # Use selected RAG index
+                        self.model_selector,
+                        self.use_rag,
+                        self.rag_selector
                     ],
                     outputs=[
-                        content_components["summary"],     # Summary text
-                        content_components["details"],     # Detailed text
-                        content_components["bullets"],     # Bullet points
-                        content_components["steps"],       # Step-by-step guide
-                        content_components["faq"],         # FAQ section
-                        suggestions["related"],           # Related topics
-                        followups["followups"],          # Follow-up questions
-                        path_display["path"]              # Navigation path
+                        content_components["summary"],
+                        content_components["details"],
+                        content_components["bullets"],
+                        content_components["steps"],
+                        content_components["faq"],
+                        *suggestions["buttons"],  # Update all suggestion buttons
+                        path_display["path"]
                     ]
                 )
         
@@ -62,6 +60,5 @@ class DiscoveryContainer:
             "container": container,
             "content": content_components,
             "suggestions": suggestions,
-            "followups": followups,
             "path": path_display
         } 

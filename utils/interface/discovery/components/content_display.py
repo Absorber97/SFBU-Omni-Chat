@@ -39,19 +39,10 @@ class ContentDisplay:
                     elem_classes=["content-text", "faq-text"]
                 )
             
-            # Related Topics Section
-            with gr.Row():
-                with gr.Column(scale=1):
-                    
-                    components["related"] = gr.Markdown(
-                        elem_classes=["content-text", "related-text"]
-                    )
-                
-                with gr.Column(scale=1):
-                    
-                    components["followups"] = gr.Markdown(
-                        elem_classes=["content-text", "followups-text"]
-                    )
+            # Suggestions Section
+            components["suggestions"] = gr.Markdown(
+                elem_classes=["content-text", "suggestions-text"]
+            )
         
         components["container"] = container
         return components 
