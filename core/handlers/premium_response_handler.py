@@ -144,7 +144,7 @@ Always aim to create a positive first impression of SFBU!"""
             
         try:
             # Get relevant documents
-            contexts = self.rag_handler.get_relevant_context(query, top_k=3)
+            contexts = await self.rag_handler.get_relevant_context(query, top_k=3)
             
             if not contexts:
                 return None
@@ -230,8 +230,11 @@ Always aim to create a positive first impression of SFBU!"""
             
             # Get RAG context if enabled
             rag_context = None
-            if use_rag:
-                rag_context = await self.get_rag_context(message)
+            if use_rag and self.rag_handler:
+                try:
+                    rag_context = await self.get_rag_context(message)
+                except Exception as e:
+                    print(f"RAG retrieval failed, falling back to regular chat: {str(e)}")
             
             # Generate response
             response = await self.chat_handler.handle_message(
@@ -239,7 +242,8 @@ Always aim to create a positive first impression of SFBU!"""
                 role=role,
                 role_prompt=role_prompt,
                 history=history,
-                rag_context=rag_context
+                rag_context=rag_context,
+                model_name=model_name
             )
             
             # Format response based on role
@@ -262,22 +266,30 @@ Always aim to create a positive first impression of SFBU!"""
     async def generate_discovery_content(
         self,
         category: str,
+        model_name: str,
         use_rag: bool = True
     ) -> Dict[str, Any]:
         """Generate discovery content with RAG integration"""
         try:
             # Get RAG context if enabled
             rag_context = None
-            if use_rag:
-                rag_context = await self.get_rag_context(category)
+            if use_rag and self.rag_handler:
+                try:
+                    rag_context = await self.get_rag_context(category)
+                except Exception as e:
+                    print(f"RAG retrieval failed, falling back to regular discovery: {str(e)}")
             
             # Add context to category if available
             category_with_context = category
             if rag_context:
-                category_with_context = f"{category}\n\n{rag_context}"
+                category_with_context = f"{category}\n\nRelevant Context:\n{rag_context}"
             
             # Generate content using discovery handler
-            content = await self.discovery_handler.generate_content(category_with_context)
+            content = await self.discovery_handler.generate_content(
+                category_input=category_with_context,
+                model_name=model_name,
+                use_rag=bool(rag_context)
+            )
             
             return {
                 **content,

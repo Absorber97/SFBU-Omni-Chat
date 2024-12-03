@@ -1,48 +1,78 @@
 import gradio as gr
 from typing import Tuple, Callable, Dict, Any
 from config import OPENAI_MODELS, ModelType
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ModelRAGSelector:
     def __init__(self, model_handler, rag_handler):
         self.model_handler = model_handler
         self.rag_handler = rag_handler
+        logger.info("Initialized ModelRAGSelector")
         
     def get_available_models(self):
         """Get list of available models"""
         try:
+            logger.info("Getting available models")
             models = self.model_handler.get_available_models()
-            return models if models else OPENAI_MODELS.get(ModelType.CHAT.value, [])
+            if models:
+                logger.info(f"Found {len(models)} models")
+                return models
+            logger.warning("No models found, using defaults")
+            return OPENAI_MODELS.get(ModelType.CHAT.value, [])
         except Exception as e:
-            print(f"Error getting models: {str(e)}")
+            logger.error(f"Error getting models: {str(e)}", exc_info=True)
             return []
             
     def get_available_indices(self):
         """Get list of available RAG indices"""
         try:
+            logger.info("Getting available RAG indices")
             indices = self.rag_handler.get_available_indices()
-            return indices if indices else ["Default"]
+            if indices:
+                logger.info(f"Found {len(indices)} indices")
+                return [idx['name'] for idx in indices]
+            logger.warning("No indices found, using default")
+            return ["Default"]
         except Exception as e:
-            print(f"Error getting indices: {str(e)}")
+            logger.error(f"Error getting indices: {str(e)}", exc_info=True)
             return ["Default"]
             
     async def handle_model_change(self, model_name: str) -> Dict[str, Any]:
         """Handle model selection change"""
         try:
-            if model_name:
-                result = self.model_handler.set_model(model_name)
-                return {"status": "success", "message": f"Model set to: {model_name}"}
-            return {"status": "error", "message": "No model selected"}
+            logger.info(f"Handling model change to: {model_name}")
+            if not model_name:
+                logger.warning("No model selected")
+                return {"status": "error", "message": "No model selected"}
+                
+            result = self.model_handler.set_model(model_name)
+            logger.info(f"Model set to: {model_name}")
+            return {"status": "success", "message": f"Model set to: {model_name}"}
+            
         except Exception as e:
+            logger.error(f"Error changing model: {str(e)}", exc_info=True)
             return {"status": "error", "message": str(e)}
             
     async def handle_rag_change(self, index_name: str) -> Dict[str, Any]:
         """Handle RAG index selection change"""
         try:
-            if index_name:
-                self.rag_handler._load_index(index_name)
-                return {"status": "success", "message": f"RAG index set to: {index_name}"}
-            return {"status": "error", "message": "No index selected"}
+            logger.info(f"Handling RAG index change to: {index_name}")
+            if not index_name:
+                logger.warning("No index selected")
+                return {"status": "error", "message": "No index selected"}
+                
+            if index_name == "Default":
+                logger.info("Using default RAG index")
+                return {"status": "success", "message": "Using default RAG index"}
+                
+            self.rag_handler._load_index(index_name)
+            logger.info(f"RAG index set to: {index_name}")
+            return {"status": "success", "message": f"RAG index set to: {index_name}"}
+            
         except Exception as e:
+            logger.error(f"Error changing RAG index: {str(e)}", exc_info=True)
             return {"status": "error", "message": str(e)}
             
 def create_model_rag_selector(

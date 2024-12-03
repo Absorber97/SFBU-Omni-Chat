@@ -3,6 +3,9 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 import os
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
     """Create the RAG setup tab interface"""
@@ -31,10 +34,11 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
             for idx in indices
         ])
     
-    def test_retrieval(query: str, k: int) -> pd.DataFrame:
+    async def test_retrieval(query: str, k: int) -> pd.DataFrame:
         """Test RAG retrieval with a query"""
         try:
-            results = rag_handler.get_relevant_context(query, k)
+            logger.info(f"Testing RAG retrieval for query: {query}")
+            results = await rag_handler.get_relevant_context(query, k)
             
             # Format results for display
             formatted_results = []
@@ -46,8 +50,10 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
                     'Source': r['metadata']['source']
                 })
                 
+            logger.info(f"Found {len(formatted_results)} results")
             return pd.DataFrame(formatted_results)
         except Exception as e:
+            logger.error(f"Error in test retrieval: {str(e)}", exc_info=True)
             return pd.DataFrame({
                 'Error': [str(e)]
             })
@@ -62,16 +68,19 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
             formatted_indices
         )
     
-    def process_file_for_rag(file_name: str, index_name: str) -> Tuple[Dict[str, Any], pd.DataFrame, gr.Dropdown]:
+    async def process_file_for_rag(file_name: str, index_name: str) -> Tuple[Dict[str, Any], pd.DataFrame, gr.Dropdown]:
         """Process selected JSONL file for RAG setup"""
         try:
+            logger.info(f"Processing file {file_name} for RAG index {index_name}")
             if not file_name:
+                logger.warning("No file selected")
                 return (
                     {"status": "error", "message": "Please select a JSONL file"},
                     pd.DataFrame(),
                     gr.Dropdown()
                 )
             if not index_name:
+                logger.warning("No index name provided")
                 return (
                     {"status": "error", "message": "Please provide an index name"},
                     pd.DataFrame(),
@@ -79,7 +88,8 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
                 )
                 
             file_path = os.path.join("rag_processing/data", file_name)
-            rag_handler.process_jsonl_file(file_path, index_name)
+            await rag_handler.process_jsonl_file(file_path, index_name)
+            logger.info(f"Successfully processed file {file_name}")
             
             # Refresh indices display and selector
             indices = get_indices()
@@ -95,6 +105,7 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
                 gr.Dropdown(choices=index_choices, value=index_name)  # Set current index as selected
             )
         except Exception as e:
+            logger.error(f"Error processing file: {str(e)}", exc_info=True)
             return (
                 {
                     "status": "error",
@@ -230,7 +241,8 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
         process_btn.click(
             fn=process_file_for_rag,
             inputs=[file_input, index_name_input],
-            outputs=[status_output, indices_df, index_selector]  # Added index_selector
+            outputs=[status_output, indices_df, index_selector],
+            api_name="process_rag_file"
         )
         
         load_btn.click(
@@ -242,13 +254,14 @@ def create_rag_setup_tab(rag_handler: Any, model_handler: Any) -> gr.Tab:
         delete_btn.click(
             fn=delete_index,
             inputs=[index_selector],
-            outputs=[status_output, indices_df, index_selector]  # Added index_selector
+            outputs=[status_output, indices_df, index_selector]
         )
         
         test_btn.click(
             fn=test_retrieval,
             inputs=[test_query, top_k],
-            outputs=[results_df]
+            outputs=[results_df],
+            api_name="test_rag_retrieval"
         )
         
     return tab 

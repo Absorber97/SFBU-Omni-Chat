@@ -1,6 +1,6 @@
 from typing import Dict, List, Any, Optional
 import numpy as np
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 import faiss
 from dataclasses import dataclass
@@ -11,6 +11,9 @@ import shutil
 import os
 from datetime import datetime
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 @dataclass
 class EmbeddingDocument:
     text: str
@@ -19,7 +22,7 @@ class EmbeddingDocument:
 
 class RAGHandler:
     def __init__(self, api_key: str):
-        self.client = OpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key)
         self.index: Optional[faiss.IndexFlatL2] = None
         self.documents: List[EmbeddingDocument] = []
         self.embedding_dim = 1536
@@ -30,6 +33,7 @@ class RAGHandler:
         
         # Try to load last active index
         self._load_last_active()
+        logger.info(f"Initialized RAGHandler with active index: {self.active_index}")
     
     def _get_storage_path(self, name: str) -> Path:
         """Get storage path for a given index name"""
@@ -72,27 +76,37 @@ class RAGHandler:
     
     def _load_index(self, name: str) -> None:
         """Load index and documents from storage"""
-        storage_path = self._get_storage_path(name)
-        
-        if not storage_path.exists():
-            raise ValueError(f"No index found with name: {name}")
+        try:
+            logger.info(f"Loading index: {name}")
+            storage_path = self._get_storage_path(name)
             
-        # Load FAISS index
-        self.index = faiss.read_index(str(storage_path / "index.faiss"))
-        
-        # Load documents
-        with open(storage_path / "documents.pkl", "rb") as f:
-            docs_data = pickle.load(f)
+            if not storage_path.exists():
+                logger.error(f"No index found with name: {name}")
+                raise ValueError(f"No index found with name: {name}")
+                
+            # Load FAISS index
+            logger.info("Loading FAISS index")
+            self.index = faiss.read_index(str(storage_path / "index.faiss"))
             
-        self.documents = []
-        for doc_dict in docs_data:
-            doc = EmbeddingDocument(
-                text=doc_dict['text'],
-                metadata=doc_dict['metadata']
-            )
-            self.documents.append(doc)
+            # Load documents
+            logger.info("Loading documents")
+            with open(storage_path / "documents.pkl", "rb") as f:
+                docs_data = pickle.load(f)
+                
+            self.documents = []
+            for doc_dict in docs_data:
+                doc = EmbeddingDocument(
+                    text=doc_dict['text'],
+                    metadata=doc_dict['metadata']
+                )
+                self.documents.append(doc)
+                
+            self._mark_as_active(name)
+            logger.info(f"Successfully loaded index with {len(self.documents)} documents")
             
-        self._mark_as_active(name)
+        except Exception as e:
+            logger.error(f"Error loading index: {str(e)}", exc_info=True)
+            raise
     
     def _mark_as_active(self, name: str) -> None:
         """Mark an index as the last active one"""
@@ -176,7 +190,7 @@ class RAGHandler:
     async def _get_embedding(self, text: str) -> np.ndarray:
         """Get embedding for text using OpenAI API"""
         try:
-            response = self.client.embeddings.create(
+            response = await self.client.embeddings.create(
                 input=text,
                 model="text-embedding-ada-002"
             )
@@ -198,7 +212,7 @@ class RAGHandler:
             embeddings.append(doc.embedding)
             
         # Stack embeddings into a single numpy array
-        embeddings_array = np.vstack(embeddings)
+        embeddings_array = np.vstack(embeddings).astype('float32')
         
         # Create or update FAISS index
         if self.index is None:
@@ -211,39 +225,51 @@ class RAGHandler:
     async def get_relevant_docs(self, query: str, top_k: int = 5):
         """Get relevant documents for a query"""
         try:
-            self.logger.info(f"Getting relevant documents for query: {query}")
+            logger.info(f"Getting relevant documents for query: {query}")
             if not self.index:
-                self.logger.warning("No index loaded")
+                logger.warning("No index loaded")
                 return []
             
             # Get document embeddings
+            logger.info("Getting query embedding")
             query_embedding = await self._get_embedding(query)
             
             # Search for similar documents using FAISS
-            distances, indices = self.index.search(query_embedding.reshape(1, -1), top_k)
+            logger.info("Searching FAISS index")
+            D, I = self.index.search(query_embedding.reshape(1, -1).astype('float32'), top_k)
             
             # Get the documents
-            docs = [self.documents[i] for i in indices[0]]
-            self.logger.info(f"Found {len(docs)} relevant documents")
+            docs = [self.documents[i] for i in I[0]]
+            logger.info(f"Found {len(docs)} relevant documents")
             return docs
             
         except Exception as e:
-            self.logger.error(f"Error getting relevant documents: {str(e)}", exc_info=True)
+            logger.error(f"Error getting relevant documents: {str(e)}", exc_info=True)
             return []
     
     async def get_relevant_context(self, query: str, top_k: int = 5) -> List[Dict]:
         """Alias for get_relevant_docs with dict formatting"""
         try:
+            logger.info(f"Getting relevant context for query: {query}")
             docs = await self.get_relevant_docs(query, top_k)
-            return [
+            
+            if not docs:
+                logger.warning("No relevant documents found")
+                return []
+            
+            formatted_docs = [
                 {
                     "metadata": doc.metadata,
-                    "content": doc.text
+                    "content": doc.text,
+                    "score": float(doc.metadata.get("score", 0.0))
                 }
                 for doc in docs
             ]
+            logger.info(f"Formatted {len(formatted_docs)} documents")
+            return formatted_docs
+            
         except Exception as e:
-            self.logger.error(f"Error getting relevant context: {str(e)}", exc_info=True)
+            logger.error(f"Error getting relevant context: {str(e)}", exc_info=True)
             return []
     
     def get_active_index(self) -> Optional[str]:
