@@ -182,10 +182,11 @@ Generate detailed information with proper formatting:
             "bullets": {
                 "system": f"""{base_system}
 Generate 4-6 key points:
-- Each point should be clear and concise
+- Each point must be on a new line
 - Start each point with a bullet point (•)
 - Focus on most important information
-- Include specific details{context_note}""",
+- Include specific details
+- Add a newline between points{context_note}""",
                 "user": f"List the key points about {topic} at SFBU.",
                 "max_tokens": 300
             },
@@ -195,20 +196,39 @@ Create a clear step-by-step guide:
 - 4-5 actionable steps
 - Number each step (1., 2., etc.)
 - Be specific and practical
-- Include any prerequisites{context_note}""",
+- Include any prerequisites
+- Add a newline between steps{context_note}""",
                 "user": f"Provide step-by-step guidance about {topic} at SFBU.",
                 "max_tokens": 400
             },
             "faq": {
                 "system": f"""{base_system}
-Generate 3 frequently asked questions:
-- Format as Q&A pairs
+Generate 3-4 frequently asked questions:
+- Format each Q&A pair clearly
+- Start questions with 'Q:' and answers with 'A:'
 - Make questions practical and relevant
-- Provide detailed answers
+- Provide detailed, informative answers
+- Add clear spacing between Q&A pairs
 - Use markdown formatting
-- Separate pairs with line breaks{context_note}""",
-                "user": f"Create an FAQ section about {topic} at SFBU.",
-                "max_tokens": 600
+Example format:
+Q: [Question here]?
+A: [Detailed answer here.]
+
+Q: [Next question]?
+A: [Next answer.]{context_note}""",
+                "user": f"Create a detailed FAQ section about {topic} at SFBU.",
+                "max_tokens": 800
+            },
+            "suggestions": {
+                "system": f"""{base_system}
+Generate 6-8 follow-up suggestions:
+- Each suggestion should be a complete sentence or question
+- Make them relevant to {topic}
+- Include both informational topics and practical questions
+- Ensure variety in suggestion types
+- Each suggestion should be clear and specific{context_note}""",
+                "user": f"Generate follow-up suggestions related to {topic} at SFBU.",
+                "max_tokens": 400
             }
         }
 
@@ -332,7 +352,8 @@ Generate 3 frequently asked questions:
                 if isinstance(point, str) and point.strip():
                     # Remove existing bullet points or numbers
                     clean_point = point.strip().lstrip('•-*123456789.').strip()
-                    formatted_points.append(f"• {clean_point}")
+                    # Add two newlines for better spacing
+                    formatted_points.append(f"• {clean_point}\n")
             
             return "\n".join(formatted_points)
             
@@ -372,16 +393,23 @@ Generate 3 frequently asked questions:
                     q = qa.get('question', '').strip()
                     a = qa.get('answer', '').strip()
                     if q and a:
-                        formatted_faqs.append(f"**Q: {q}**\n\nA: {a}")
+                        # Add extra newlines for better spacing
+                        formatted_faqs.append(f"**Q: {q}**\n\nA: {a}\n")
                 elif isinstance(qa, str):
                     # Handle string FAQ entries
-                    parts = qa.split('?', 1)
-                    if len(parts) == 2:
-                        q = parts[0].strip()
+                    if ':' in qa:
+                        parts = qa.split(':', 1)
+                        q = parts[0].strip().lstrip('Q').lstrip('Question').strip()
                         a = parts[1].strip()
-                        formatted_faqs.append(f"**Q: {q}?**\n\nA: {a}")
+                        formatted_faqs.append(f"**Q: {q}**\n\nA: {a}\n")
+                    else:
+                        parts = qa.split('?', 1)
+                        if len(parts) == 2:
+                            q = parts[0].strip()
+                            a = parts[1].strip()
+                            formatted_faqs.append(f"**Q: {q}?**\n\nA: {a}\n")
             
-            return "\n\n---\n\n".join(formatted_faqs) if formatted_faqs else ""
+            return "\n---\n\n".join(formatted_faqs) if formatted_faqs else ""
             
         except Exception as e:
             logger.error(f"Error formatting FAQ: {str(e)}")
@@ -393,42 +421,22 @@ Generate 3 frequently asked questions:
             logger.info("Generating followup suggestions")
             
             # Get AI-generated suggestions
-            suggestions = content.get('suggestions', [])
-            if isinstance(suggestions, str):
-                suggestions = [s.strip() for s in suggestions.split('\n') if s.strip()]
-            elif not isinstance(suggestions, list):
-                suggestions = []
+            suggestions = []
             
-            # Clean and format suggestions
-            formatted_suggestions = []
-            emojis = ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝']
-            emoji_index = 0
-            
-            for suggestion in suggestions:
-                if not isinstance(suggestion, str):
-                    continue
-                    
-                # Remove any existing emojis
-                cleaned_suggestion = ' '.join([
-                    word for word in suggestion.split()
-                    if not any(char in word for char in ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝', '🔍'])
-                ]).strip()
-                
-                # Skip if suggestion is too short or incomplete
-                if len(cleaned_suggestion) < 10 or not cleaned_suggestion.endswith(('.', '?')):
-                    continue
-                    
-                # Add single emoji and format
-                formatted_suggestion = f"{emojis[emoji_index % len(emojis)]} {cleaned_suggestion}"
-                formatted_suggestions.append(formatted_suggestion)
-                emoji_index += 1
+            # Get suggestions from content
+            content_suggestions = content.get('suggestions', '')
+            if isinstance(content_suggestions, str):
+                # Split by newlines and clean up
+                suggestions.extend([s.strip() for s in content_suggestions.split('\n') if s.strip()])
+            elif isinstance(content_suggestions, list):
+                suggestions.extend(content_suggestions)
             
             # Add RAG-based suggestions if available
             if self.rag_handler:
                 try:
                     rag_context = await self.rag_handler.get_relevant_context(
                         query=context,
-                        top_k=3  # Limit RAG suggestions
+                        top_k=3
                     )
                     
                     if isinstance(rag_context, list):
@@ -436,23 +444,45 @@ Generate 3 frequently asked questions:
                             if isinstance(ctx, dict):
                                 title = ctx.get('metadata', {}).get('title', '')
                                 if title and len(title) > 10:
-                                    formatted_suggestions.append(f"🔍 {title}")
+                                    suggestions.append(title)
                 except Exception as e:
                     logger.error(f"Error processing RAG suggestions: {str(e)}")
             
-            # Deduplicate and limit suggestions
-            unique_suggestions: List[str] = []
-            seen: set = set()
-            for suggestion in formatted_suggestions:
+            # Format and deduplicate suggestions
+            formatted_suggestions = []
+            emojis = ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝']
+            seen = set()
+            
+            for i, suggestion in enumerate(suggestions):
                 if not isinstance(suggestion, str):
                     continue
-                clean_text = suggestion[2:].lower()  # Remove emoji and lowercase for comparison
-                if clean_text not in seen and len(unique_suggestions) < 8:
-                    seen.add(clean_text)
-                    unique_suggestions.append(suggestion)
+                
+                # Clean suggestion
+                clean_text = suggestion.strip()
+                clean_text = ' '.join([
+                    word for word in clean_text.split()
+                    if not any(char in word for char in ['📚', '🎓', '💡', '🔬', '📝', '🌟', '💼', '🤝', '🔍'])
+                ]).strip()
+                
+                # Skip if too short or duplicate
+                if len(clean_text) < 10 or clean_text.lower() in seen:
+                    continue
+                
+                # Ensure it ends with proper punctuation
+                if not clean_text.endswith(('.', '?', '!')):
+                    clean_text += '.'
+                
+                # Add emoji and format
+                formatted = f"{emojis[i % len(emojis)]} {clean_text}"
+                formatted_suggestions.append(formatted)
+                seen.add(clean_text.lower())
+                
+                # Limit to 8 suggestions
+                if len(formatted_suggestions) >= 8:
+                    break
             
-            logger.info(f"Generated {len(unique_suggestions)} unique followup suggestions")
-            return unique_suggestions
+            logger.info(f"Generated {len(formatted_suggestions)} unique followup suggestions")
+            return formatted_suggestions
             
         except Exception as e:
             logger.error(f"Error generating followups: {str(e)}")
