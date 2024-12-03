@@ -138,7 +138,12 @@ def create_premium_chat_tab(app, model_handler, rag_handler):
                         clear = gr.Button("Clear 🗑️")
             
             # Discovery Mode Container
-            discovery_container = DiscoveryContainer(discovery_handler).create()
+            discovery_container = DiscoveryContainer(
+                discovery_handler=discovery_handler,
+                model_selector=model_selector,
+                rag_selector=rag_index_selector,
+                use_rag=use_rag
+            ).create()
             
             async def handle_chat(
                 message: str,

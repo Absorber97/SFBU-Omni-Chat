@@ -8,8 +8,11 @@ from utils.interface.discovery.components.navigation_path import NavigationPath
 class DiscoveryContainer:
     """Modern Discovery Mode container component"""
     
-    def __init__(self, discovery_handler):
+    def __init__(self, discovery_handler, model_selector, rag_selector, use_rag):
         self.discovery_handler = discovery_handler
+        self.model_selector = model_selector
+        self.rag_selector = rag_selector
+        self.use_rag = use_rag
         self.category_selector = CategorySelector()
         self.content_display = ContentDisplay()
         self.suggestion_chips = SuggestionChips()
@@ -23,47 +26,42 @@ class DiscoveryContainer:
             path_display = self.navigation_path.create()
             
             # Category selection
-            category_components = self.category_selector.create()
+            category_container, suggestion_buttons = self.category_selector.create()
             
             # Content sections
             content_components = self.content_display.create()
             
             # Suggestion chips
             with gr.Row():
-                suggestion_components = self.suggestion_chips.create()
-                followup_components = self.followup_chips.create()
+                suggestions = self.suggestion_chips.create()
+                followups = self.followup_chips.create()
             
-            # Event handlers
-            category_components["category"].change(
-                fn=self.category_selector._update_subcategories,
-                inputs=[category_components["category"]],
-                outputs=[category_components["subcategory"]]
-            )
-            
-            category_components["subcategory"].change(
-                fn=self.discovery_handler.handle_suggestion_click,
-                inputs=[
-                    category_components["subcategory"],
-                    gr.State("gpt-4"),  # Default model
-                    gr.State(True)  # Use RAG by default
-                ],
-                outputs=[
-                    content_components["summary"],
-                    content_components["details"],
-                    content_components["steps"],
-                    content_components["faq"],
-                    suggestion_components["container"],
-                    followup_components["container"],
-                    path_display["path"]
-                ]
-            )
+            # Event handlers for suggestion buttons
+            for button in suggestion_buttons:
+                button.click(
+                    fn=self.discovery_handler.handle_suggestion_click,
+                    inputs=[
+                        button,
+                        self.model_selector,  # Use selected model
+                        self.use_rag,        # Use RAG setting
+                        self.rag_selector    # Use selected RAG index
+                    ],
+                    outputs=[
+                        content_components["summary"],     # Summary text
+                        content_components["details"],     # Detailed text
+                        content_components["bullets"],     # Bullet points
+                        content_components["steps"],       # Step-by-step guide
+                        content_components["faq"],         # FAQ section
+                        suggestions["related"],           # Related topics
+                        followups["followups"],          # Follow-up questions
+                        path_display["path"]              # Navigation path
+                    ]
+                )
         
         return {
             "container": container,
-            "category": category_components["category"],
-            "subcategory": category_components["subcategory"],
             "content": content_components,
-            "suggestions": suggestion_components,
-            "followups": followup_components,
+            "suggestions": suggestions,
+            "followups": followups,
             "path": path_display
         } 

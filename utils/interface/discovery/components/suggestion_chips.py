@@ -10,20 +10,14 @@ class SuggestionChips:
             suggestions = []
             
         with gr.Column(elem_classes=["suggestion-chips"]) as container:
-            gr.Markdown("### Suggested Topics")
-            
-            with gr.Row(elem_classes=["chips-container"]):
-                chips = [
-                    gr.Button(
-                        value=suggestion,
-                        elem_classes=["suggestion-chip"],
-                        size="sm"
-                    ) for suggestion in suggestions
-                ]
+            gr.Markdown("### 🔍 Related Topics")
+            related = gr.Markdown(
+                elem_classes=["content-text", "related-text"]
+            )
         
         return {
             "container": container,
-            "chips": chips
+            "related": related
         }
     
     def update(self, suggestions: List[str]) -> List[Dict[str, Any]]:
@@ -42,20 +36,14 @@ class FollowupChips:
             suggestions = []
             
         with gr.Column(elem_classes=["followup-chips"]) as container:
-            gr.Markdown("### Follow-up Questions")
-            
-            with gr.Row(elem_classes=["chips-container"]):
-                chips = [
-                    gr.Button(
-                        value=suggestion,
-                        elem_classes=["followup-chip"],
-                        size="sm"
-                    ) for suggestion in suggestions
-                ]
+            gr.Markdown("### 🤔 Follow-up Questions")
+            followups = gr.Markdown(
+                elem_classes=["content-text", "followups-text"]
+            )
         
         return {
             "container": container,
-            "chips": chips
+            "followups": followups
         }
     
     def update(self, suggestions: List[str]) -> List[Dict[str, Any]]:

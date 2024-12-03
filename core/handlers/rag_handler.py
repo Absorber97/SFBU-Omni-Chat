@@ -145,7 +145,7 @@ class RAGHandler:
             except FileNotFoundError:
                 pass
     
-    def process_jsonl_file(self, file_path: str, index_name: str) -> None:
+    async def process_jsonl_file(self, file_path: str, index_name: str) -> None:
         """Process JSONL file and create embeddings"""
         documents = []
         
@@ -170,10 +170,22 @@ class RAGHandler:
                 )
                 documents.append(doc)
         
-        self._create_embeddings(documents)
+        await self._create_embeddings(documents)
         self._save_index(index_name)
     
-    def _create_embeddings(self, documents: List[EmbeddingDocument]) -> None:
+    async def _get_embedding(self, text: str) -> np.ndarray:
+        """Get embedding for text using OpenAI API"""
+        try:
+            response = self.client.embeddings.create(
+                input=text,
+                model="text-embedding-ada-002"
+            )
+            return np.array(response.data[0].embedding)
+        except Exception as e:
+            self.logger.error(f"Error getting embedding: {str(e)}", exc_info=True)
+            raise
+    
+    async def _create_embeddings(self, documents: List[EmbeddingDocument]) -> None:
         """Create embeddings for documents using OpenAI API"""
         if not documents:
             self.logger.warning("No documents to process")
@@ -182,11 +194,7 @@ class RAGHandler:
         embeddings = []
         
         for doc in documents:
-            response = self.client.embeddings.create(
-                input=doc.text,
-                model="text-embedding-ada-002"
-            )
-            doc.embedding = np.array(response.data[0].embedding)
+            doc.embedding = await self._get_embedding(doc.text)
             embeddings.append(doc.embedding)
             
         # Stack embeddings into a single numpy array
@@ -200,40 +208,42 @@ class RAGHandler:
         self.index.add(embeddings_array)
         self.documents.extend(documents)
     
-    def get_relevant_context(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Get relevant context for a query"""
-        if self.index is None or not self.documents:
-            self.logger.warning("No index or documents available")
-            return []
-        
+    async def get_relevant_docs(self, query: str, top_k: int = 5):
+        """Get relevant documents for a query"""
         try:
-            # Get query embedding
-            query_embedding = self.client.embeddings.create(
-                input=query,
-                model="text-embedding-ada-002"
-            ).data[0].embedding
+            self.logger.info(f"Getting relevant documents for query: {query}")
+            if not self.index:
+                self.logger.warning("No index loaded")
+                return []
             
-            # Convert to numpy array and reshape
-            query_array = np.array([query_embedding]).astype('float32')
+            # Get document embeddings
+            query_embedding = await self._get_embedding(query)
             
-            # Search index using FAISS
-            D, I = self.index.search(query_array, top_k)  # Changed to use simpler search interface
+            # Search for similar documents using FAISS
+            distances, indices = self.index.search(query_embedding.reshape(1, -1), top_k)
             
-            # Return relevant documents with scores
-            results = []
-            for score, idx in zip(D[0], I[0]):  # D[0] and I[0] because search returns 2D arrays
-                if 0 <= idx < len(self.documents):
-                    doc = self.documents[idx]
-                    results.append({
-                        'text': doc.text,
-                        'metadata': doc.metadata,
-                        'score': float(score)
-                    })
-                    
-            return results
+            # Get the documents
+            docs = [self.documents[i] for i in indices[0]]
+            self.logger.info(f"Found {len(docs)} relevant documents")
+            return docs
             
         except Exception as e:
-            self.logger.error(f"Error during search: {str(e)}")
+            self.logger.error(f"Error getting relevant documents: {str(e)}", exc_info=True)
+            return []
+    
+    async def get_relevant_context(self, query: str, top_k: int = 5) -> List[Dict]:
+        """Alias for get_relevant_docs with dict formatting"""
+        try:
+            docs = await self.get_relevant_docs(query, top_k)
+            return [
+                {
+                    "metadata": doc.metadata,
+                    "content": doc.text
+                }
+                for doc in docs
+            ]
+        except Exception as e:
+            self.logger.error(f"Error getting relevant context: {str(e)}", exc_info=True)
             return []
     
     def get_active_index(self) -> Optional[str]:
