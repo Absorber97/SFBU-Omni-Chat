@@ -11,6 +11,65 @@ class ChatModeHandler:
         self.client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         logger.info("Initialized ChatModeHandler")
         
+    def _get_role_structure(self, role: str) -> str:
+        """Get role-specific response structure"""
+        if role in ["faculty", "staff"]:
+            return """RESPONSE STRUCTURE:
+1. Professional Opening:
+   - Formal greeting
+   - Clear acknowledgment of the query
+
+2. Comprehensive Answer (2-3 paragraphs):
+   - Detailed analysis
+   - Reference to SFBU policies
+   - Supporting data or research
+
+3. Implementation/Resources:
+   - Relevant procedures
+   - Available resources
+   - Contact information
+
+4. Professional Closing:
+   - Next steps
+   - Additional considerations
+   - Follow-up availability
+
+FORMAT REQUIREMENTS:
+- Use descriptive headers (##)
+- Bullet points for lists
+- Bold (**) key terms
+- 1-2 relevant emojis
+- Clear section breaks
+- Tables for complex data
+- Citations where applicable"""
+        else:  # student or visitor
+            return """RESPONSE STRUCTURE:
+1. Friendly Opening:
+   - Warm greeting with emoji
+   - Show enthusiasm
+
+2. Clear Answer:
+   - Simple, direct explanation
+   - Relatable examples
+   - Practical tips
+
+3. Helpful Resources:
+   - Key contacts
+   - Where to learn more
+   - Quick tips
+
+4. Engaging Closing:
+   - Encouragement
+   - Next steps
+   - Open invitation for questions
+
+FORMAT REQUIREMENTS:
+- Conversational tone
+- Short, clear paragraphs
+- 3-4 engaging emojis
+- Simple bullet points
+- Friendly examples"""
+
     async def handle_message(
         self,
         query: str,
@@ -26,13 +85,28 @@ class ChatModeHandler:
             
             # Format chat history
             chat_history = self._format_history(history) if history else []
-            logger.info(f"Formatted chat history with {len(chat_history)} messages")
             
-            # Combine role prompt with RAG context if available
-            system_prompt = role_prompt
+            # Get role-specific structure and traits
+            response_structure = self._get_role_structure(role)
+            personality_traits = self._get_role_traits(role)
+            
+            # Build role-specific system prompt
+            system_prompt = f"""You are an SFBU AI Assistant with the following traits:
+{personality_traits}
+
+{response_structure}
+
+RESPONSE LENGTH:
+{self._get_length_guide(role)}
+
+TONE GUIDELINES:
+- Maintain consistent {role}-appropriate voice
+- Use {self._get_language_style(role)}
+- Include {self._get_example_style(role)}"""
+
+            # Add RAG context if available
             if rag_context:
-                system_prompt = f"{role_prompt}\n\nRelevant Context:\n{rag_context}"
-                logger.info("Added RAG context to system prompt")
+                system_prompt = f"{system_prompt}\n\nRelevant Context:\n{rag_context}\n\nNaturally integrate this context while maintaining your role's style."
             
             # Construct messages array
             messages = [
@@ -41,13 +115,14 @@ class ChatModeHandler:
                 {"role": "user", "content": query}
             ]
             
-            # Generate response
-            logger.info(f"Generating response using model: {model_name or OPENAI_MODELS[ModelType.CHAT.value]}")
+            # Generate response with role-appropriate parameters
             response = await self.client.chat.completions.create(
                 model=model_name or OPENAI_MODELS[ModelType.CHAT.value],
                 messages=messages,
-                temperature=MODEL_PARAMS[ModelType.CHAT.value].get('temperature', 0.7),
-                max_tokens=MODEL_PARAMS[ModelType.CHAT.value].get('max_tokens', 1000)
+                temperature=self._get_temperature(role),
+                max_tokens=self._get_max_tokens(role),
+                presence_penalty=0.6,
+                frequency_penalty=0.3
             )
             
             content = response.choices[0].message.content
@@ -61,7 +136,58 @@ class ChatModeHandler:
         except Exception as e:
             logger.error(f"Error handling message: {str(e)}", exc_info=True)
             return f"I apologize, but I encountered an error: {str(e)}"
-            
+
+    def _get_length_guide(self, role: str) -> str:
+        """Get role-specific length guidelines"""
+        if role == "faculty":
+            return "Provide comprehensive responses (4-5 paragraphs) with detailed analysis and academic context"
+        elif role == "staff":
+            return "Give thorough responses (3-4 paragraphs) focusing on procedures and practical implementation"
+        elif role == "student":
+            return "Keep responses concise and engaging (2-3 short paragraphs) with clear action items"
+        else:  # visitor
+            return "Provide brief, welcoming responses (2 paragraphs) highlighting key information"
+
+    def _get_language_style(self, role: str) -> str:
+        """Get role-specific language style"""
+        styles = {
+            "faculty": "formal academic language with field-specific terminology",
+            "staff": "professional administrative language with procedural clarity",
+            "student": "friendly, relatable language with current student terms",
+            "visitor": "welcoming, accessible language with clear explanations"
+        }
+        return styles.get(role, styles["visitor"])
+
+    def _get_example_style(self, role: str) -> str:
+        """Get role-specific example style"""
+        styles = {
+            "faculty": "academic scenarios and research-based examples",
+            "staff": "specific procedural examples and administrative cases",
+            "student": "relatable student experiences and practical scenarios",
+            "visitor": "general university examples and visitor-relevant situations"
+        }
+        return styles.get(role, styles["visitor"])
+
+    def _get_temperature(self, role: str) -> float:
+        """Get role-specific temperature setting"""
+        temps = {
+            "faculty": 0.6,  # More focused on accuracy
+            "staff": 0.65,   # Balance of accuracy and flexibility
+            "student": 0.75, # More conversational
+            "visitor": 0.7   # Welcoming but informative
+        }
+        return temps.get(role, 0.7)
+
+    def _get_max_tokens(self, role: str) -> int:
+        """Get role-specific max tokens"""
+        tokens = {
+            "faculty": 2500,  # Longer, comprehensive responses
+            "staff": 2000,    # Detailed but focused responses
+            "student": 1000,  # Shorter, concise responses
+            "visitor": 800    # Brief, welcoming responses
+        }
+        return tokens.get(role, 1000)
+
     def _format_history(self, history: List[List[str]]) -> List[Dict[str, str]]:
         """Format chat history for the API"""
         if not history:
@@ -74,3 +200,36 @@ class ChatModeHandler:
                 {"role": "assistant", "content": assistant_msg}
             ])
         return formatted_history 
+
+    def _get_role_traits(self, role: str) -> str:
+        """Get personality traits for specific roles"""
+        traits = {
+            "student": """- Use friendly, relatable language
+- Show enthusiasm for learning and campus life
+- Share personal-feeling examples
+- Be encouraging and supportive
+- Use current student terminology
+- Express understanding of student challenges""",
+            
+            "faculty": """- Maintain scholarly tone
+- Emphasize academic excellence
+- Reference research and pedagogy
+- Show deep subject expertise
+- Focus on educational impact
+- Use professional academic language""",
+            
+            "staff": """- Project efficiency and organization
+- Focus on processes and procedures
+- Maintain service-oriented approach
+- Show attention to detail
+- Reference specific SFBU systems
+- Use clear administrative language""",
+            
+            "visitor": """- Be welcoming and informative
+- Show enthusiasm about SFBU
+- Highlight unique campus features
+- Use accessible language
+- Share engaging university facts
+- Maintain helpful, guiding tone"""
+        }
+        return traits.get(role, traits["visitor"])
