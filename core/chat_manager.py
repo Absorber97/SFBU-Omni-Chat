@@ -1,10 +1,11 @@
-from typing import List, Dict, Any
-from openai import OpenAI
+from typing import List, Dict, Any, Sequence
+from openai import AsyncOpenAI
+from openai.types.chat import ChatCompletionMessageParam
 import logging
 
 class ChatManager:
     def __init__(self, api_key: str):
-        self.client = OpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key)
         self.model_id = None
         self.logger = logging.getLogger(__name__)
 
@@ -20,7 +21,11 @@ class ChatManager:
             self.logger.error(f"Error setting model: {str(e)}")
             return {"status": "error", "message": str(e)}
 
-    def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
+    async def generate_response(
+        self,
+        messages: Sequence[ChatCompletionMessageParam],
+        temperature: float = 0.7
+    ) -> str:
         """Generate a response using the specified model"""
         try:
             if not self.model_id:
@@ -35,7 +40,7 @@ class ChatManager:
             self.logger.debug(f"Temperature: {temperature}")
 
             # Make the API call
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_id,
                 messages=messages,
                 temperature=temperature
@@ -49,6 +54,7 @@ class ChatManager:
             if not content:
                 raise ValueError("Received empty response from API")
 
+            self.logger.info("Successfully generated response")
             return content
 
         except Exception as e:

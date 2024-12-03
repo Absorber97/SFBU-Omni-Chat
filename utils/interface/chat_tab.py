@@ -1,5 +1,8 @@
 import gradio as gr
 from typing import Any, Dict, List, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
     """Create the Chat tab components with RAG integration"""
@@ -8,14 +11,17 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
     def refresh_rag_indices() -> Tuple[gr.Dropdown, Dict[str, Any]]:
         """Refresh available RAG indices"""
         try:
+            logger.info("Refreshing RAG indices")
             indices = rag_handler.get_available_indices()
             index_choices = [idx['name'] for idx in indices]
             current_index = rag_handler.get_active_index()
+            logger.info(f"Found {len(indices)} indices, current active: {current_index}")
             return (
                 gr.Dropdown(choices=index_choices, value=current_index),
                 {"active_index": current_index or "None"}
             )
         except Exception as e:
+            logger.error(f"Error refreshing indices: {str(e)}", exc_info=True)
             return (
                 gr.Dropdown(choices=[], value=None),
                 {"active_index": "None", "error": str(e)}
@@ -24,23 +30,33 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
     def load_rag_index(index_name: str) -> Dict[str, Any]:
         """Load selected RAG index"""
         try:
+            logger.info(f"Loading RAG index: {index_name}")
             if not index_name:
+                logger.warning("No index selected")
                 return {"active_index": "None", "status": "error", "message": "No index selected"}
             rag_handler._load_index(index_name)
+            logger.info(f"Successfully loaded index: {index_name}")
             return {
                 "active_index": index_name,
                 "status": "success",
                 "message": f"Successfully loaded index: {index_name}"
             }
         except Exception as e:
+            logger.error(f"Error loading index: {str(e)}", exc_info=True)
             return {
                 "active_index": "None",
                 "status": "error",
                 "message": f"Error loading index: {str(e)}"
             }
-
-    def send_message(message: str, history: List[Tuple[str, str]], 
-                    model_id: str, use_rag: bool, rag_index: str) -> Tuple[List[Tuple[str, str]], Dict]:
+    
+    async def send_message(
+        message: str,
+        history: List[Tuple[str, str]], 
+        model_id: str,
+        use_rag: bool,
+        rag_index: str
+    ) -> Tuple[List[Tuple[str, str]], Dict]:
+        """Handle sending a message with RAG integration"""
         if not message.strip():
             return history, {"error": "Please enter a message"}
             
@@ -51,6 +67,8 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
             return history, {"error": "Please select a RAG index first"}
             
         try:
+            logger.info(f"Processing message with model: {model_id}, RAG enabled: {use_rag}")
+            
             # First set the model in both handlers
             app.chat_manager.set_model(model_id)
             model_handler.select_model(model_id)
@@ -58,10 +76,14 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
             context_text = None
             if use_rag:
                 try:
+                    logger.info(f"Loading RAG index: {rag_index}")
                     rag_handler._load_index(rag_index)
-                    contexts = rag_handler.get_relevant_context(message)
+                    
+                    logger.info("Getting relevant context")
+                    contexts = await rag_handler.get_relevant_context(message)
                     
                     if contexts:
+                        logger.info(f"Found {len(contexts)} relevant contexts")
                         context_text = "\n\n".join([
                             f"Relevant context (confidence: {c['score']:.2f}):\n"
                             f"Q: {c['metadata']['question']}\n"
@@ -69,7 +91,7 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
                             for c in contexts
                         ])
                 except Exception as e:
-                    app.logger.warning(f"RAG retrieval failed, falling back to regular chat: {str(e)}")
+                    logger.warning(f"RAG retrieval failed, falling back to regular chat: {str(e)}")
             
             # Get appropriate system prompt based on context and RAG status
             system_message = app.chat_styling.get_system_prompt(
@@ -88,22 +110,27 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
             messages.append({"role": "user", "content": message})
             
             try:
+                logger.info("Generating response")
                 # Generate response with appropriate temperature
-                response = app.chat_manager.generate_response(
+                response = await app.chat_manager.generate_response(
                     messages=messages,
                     temperature=0.7
                 )
                 
                 if response:
+                    logger.info("Successfully generated response")
                     history.append((message, response))
                     return history, {"status": "success"}
                 else:
+                    logger.warning("Received empty response from model")
                     return history, {"error": "Received empty response from model"}
                 
             except Exception as e:
+                logger.error(f"Error generating response: {str(e)}", exc_info=True)
                 return history, {"error": f"Error generating response: {str(e)}"}
             
         except Exception as e:
+            logger.error(f"Error in send_message: {str(e)}", exc_info=True)
             return history, {"error": str(e)}
 
     with gr.Tab("💬 Chat") as tab:
@@ -146,7 +173,7 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
                     )
                     rag_refresh_btn = gr.Button("🔄", scale=1, min_width=50)
             
-            # Chat components (unchanged)
+            # Chat components
             chat_history = gr.Chatbot(
                 label="Chat History",
                 height=700,
@@ -177,15 +204,17 @@ def create_chat_tab(app: Any, model_handler: Any, rag_handler: Any) -> gr.Tab:
 
         # Event handlers
         send_btn.click(
-            send_message,
+            fn=send_message,
             inputs=[chat_input, chat_history, model_selector, use_rag, rag_index_selector],
-            outputs=[chat_history, system_info]
+            outputs=[chat_history, system_info],
+            api_name="send_chat_message"  # Add API name for async function
         )
 
         chat_input.submit(
-            send_message,
+            fn=send_message,
             inputs=[chat_input, chat_history, model_selector, use_rag, rag_index_selector],
-            outputs=[chat_history, system_info]
+            outputs=[chat_history, system_info],
+            api_name="submit_chat_message"  # Add API name for async function
         )
 
         clear_btn.click(
