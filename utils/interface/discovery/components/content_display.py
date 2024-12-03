@@ -10,12 +10,11 @@ class ContentDisplay:
         
         with gr.Column(elem_classes=["content-display"]) as container:
             # Quick Summary Section
-            with gr.Group(elem_classes=["content-section", "summary-section"]):
-                gr.Markdown("### 🎯 Quick Summary")
+            with gr.Accordion("🎯 Quick Summary", open=False, elem_classes=["summary-section"]):
                 components["summary"] = gr.Markdown(
-                    elem_classes=["content-text", "summary-text"]
+                    elem_classes=["content-text", "details-text"]
                 )
-            
+
             # Detailed Information Section
             with gr.Accordion("📚 Detailed Information", open=False, elem_classes=["details-section"]):
                 components["details"] = gr.Markdown(

@@ -6,10 +6,11 @@ class NavigationPath:
     
     def create(self) -> Dict[str, Any]:
         """Create navigation path component"""
-        with gr.Group(elem_classes=["path-container"]) as container:
-            gr.Markdown("### 🧭 Current Path")
-            path = gr.Markdown(elem_classes=["path-content"])
-        
+        with gr.Accordion("🧭 Current Path", open=False, elem_classes=["path-container"]) as container:
+            path = gr.Markdown(
+                elem_classes=["path-content"]
+            )
+
         return {
             "container": container,
             "path": path

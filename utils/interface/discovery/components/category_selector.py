@@ -44,18 +44,24 @@ class CategorySelector:
         with gr.Column(elem_classes=["category-selector"]) as container:
             gr.Markdown("### 🎯 Explore SFBU")
             
-            # Create category sections
+            # Create category sections in a grid layout
             for category, suggestions in self.CORE_CATEGORIES.items():
-                with gr.Group(elem_classes=["category-group"]):
-                    gr.Markdown(f"#### {category}")
-                    with gr.Row(elem_classes=["suggestion-chips"]):
-                        for suggestion in suggestions:
-                            button = gr.Button(
-                                value=suggestion,
-                                elem_classes=["suggestion-chip"],
-                                size="sm"
-                            )
-                            suggestion_buttons.append(button)
+                with gr.Group(elem_classes=["category-section"]):
+                    gr.Markdown(f"### {category}", elem_classes=["category-title"])
+                    
+                    # Create a 2x2 grid for suggestions
+                    with gr.Row(equal_height=True):
+                        for i in range(0, len(suggestions), 2):
+                            with gr.Column(scale=1):
+                                for j in range(2):
+                                    if i + j < len(suggestions):
+                                        button = gr.Button(
+                                            value=suggestions[i + j],
+                                            elem_classes=["category-button"],
+                                            variant="secondary",
+                                            size="lg"
+                                        )
+                                        suggestion_buttons.append(button)
         
         return container, suggestion_buttons
     
