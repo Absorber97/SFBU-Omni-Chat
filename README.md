@@ -2,9 +2,9 @@
 
 An intelligent chatbot system for San Francisco Bay University, powered by OpenAI's GPT models with RAG (Retrieval Augmented Generation) capabilities. This system provides personalized assistance to students, faculty, and staff while leveraging advanced natural language processing and information retrieval techniques.
 
-Related Project: https://github.com/Absorber97/Omni-Doc-Starter
-
 ![Cover](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Cover.png)
+
+🔮 Related Project: https://github.com/Absorber97/Omni-Doc-Starter
 
 ## 🌟 Overview
 
