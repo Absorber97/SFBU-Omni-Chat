@@ -2,6 +2,8 @@
 
 An intelligent chatbot system for San Francisco Bay University, powered by OpenAI's GPT models with RAG (Retrieval Augmented Generation) capabilities. This system provides personalized assistance to students, faculty, and staff while leveraging advanced natural language processing and information retrieval techniques.
 
+![Cover](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Cover.png)
+
 ## 🌟 Overview
 
 SFBU Omni Chat serves as a comprehensive knowledge assistant that can:
@@ -48,6 +50,9 @@ sfbu-omni-chat/
 ## 🚀 Features
 
 ### Data Processing & Extraction
+
+![Processing](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Data%20Processing.png)
+
 - **Document Processing**
   - PDF text extraction with layout preservation
   - Table and image detection
@@ -70,6 +75,9 @@ sfbu-omni-chat/
   - Link validation and tracking
 
 ### Model Fine-tuning
+
+![Fine-tuning](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Fine-tuning.png)
+
 - **Training Pipeline**
   - Custom dataset creation and curation
   - Training data validation
@@ -85,6 +93,9 @@ sfbu-omni-chat/
   - Model deployment automation
 
 ### RAG (Retrieval Augmented Generation)
+
+![RAG](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/RAG%20Setup.png)
+
 - **Vector Database**
   - FAISS-powered similarity search
   - Multiple index management
@@ -107,12 +118,17 @@ sfbu-omni-chat/
   - Knowledge graph integration
 
 ### Chat Capabilities
+
+![Standard](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Vanilla%20Chat.png?raw=true)
+
 - **Standard Chat Mode**
   - Natural language understanding
   - Context-aware responses
   - Multi-turn conversations
   - Rich text formatting
   - Code syntax highlighting
+
+![Premium - Discover](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Discovery%20Mode.png)
 
 - **Premium Chat Features**
   - Advanced query understanding
