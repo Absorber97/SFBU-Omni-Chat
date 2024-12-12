@@ -4,7 +4,9 @@ An intelligent chatbot system for San Francisco Bay University, powered by OpenA
 
 ![Cover](https://github.com/Absorber97/SFBU-Omni-Chat/blob/main/assets/github/Cover.png)
 
-🔮 Related Project: https://github.com/Absorber97/Omni-Doc-Starter
+- Google Slides: https://docs.google.com/presentation/d/18FLJw9RFCIcMpSzneT8o5epU9W2bsF4slc8HSN3Bomg/edit?usp=sharing
+- Google Slides (PDF): https://drive.google.com/file/d/1tnbNv8d82BBdf3P5KVRmUL07sYNZCrNF/view?usp=sharing
+- 🔮 Related Project: https://github.com/Absorber97/Omni-Doc-Starter
 
 ## 🌟 Overview
 
