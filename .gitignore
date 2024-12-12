@@ -61,7 +61,6 @@ rag_processing/storage/*
 !rag_processing/storage/.gitkeep
 
 # Assets - Keep structure but ignore specific files
-assets/*
 !assets/images/
 assets/images/*
 !assets/images/*.jpeg
